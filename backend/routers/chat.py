@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from deps.project_access import ProjectForUser
-from models import ChatMessage
+from models import Account, ChatMessage
 from schemas.chat import ChatMessageOut, ChatRequest, DraftEmailRequest
 from services.claude_service import stream_chat
 
@@ -32,7 +32,8 @@ async def chat(project: ProjectForUser, body: ChatRequest, request: Request, db:
     # session is closed before Starlette starts iterating the StreamingResponse,
     # so any later attribute access on `project` would raise DetachedInstanceError.
     project_id = project.id
-    system = build_system_prompt(project)
+    account = db.query(Account).filter_by(id=project.owner_id).first()
+    system = build_system_prompt(project, account)
     history = load_history(project, db)
     user_message = body.message
 

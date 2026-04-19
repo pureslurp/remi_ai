@@ -11,7 +11,7 @@ class Project(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid4()))
     owner_id = Column(String, ForeignKey("accounts.id"), nullable=False)
     name = Column(String, nullable=False)
-    client_type = Column(String, nullable=False)  # "buyer" | "seller"
+    client_type = Column(String, nullable=False)  # "buyer" | "seller" | "buyer & seller"
     email_addresses = Column(JSON, default=list)
     phone = Column(String)
     notes = Column(Text)

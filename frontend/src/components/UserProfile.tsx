@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../store/appStore'
 import * as api from '../api/client'
+import SystemPromptSettings from './SystemPromptSettings'
+
 export default function UserProfile() {
   const { googleUser } = useAppStore()
   const [open, setOpen] = useState(false)
+  const [settingsOpen, setSettingsOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -62,13 +65,24 @@ export default function UserProfile() {
           </div>
           <button
             type="button"
+            onClick={() => {
+              setOpen(false)
+              setSettingsOpen(true)
+            }}
+            className="w-full text-left px-3 py-2 text-sm text-gray-200 hover:bg-gray-700/80 transition"
+          >
+            AI prompt settings…
+          </button>
+          <button
+            type="button"
             onClick={signOut}
-            className="w-full text-left px-3 py-2 text-sm text-red-300 hover:bg-gray-700/80 transition"
+            className="w-full text-left px-3 py-2 text-sm text-red-300 hover:bg-gray-700/80 transition border-t border-gray-700"
           >
             Sign out
           </button>
         </div>
       )}
+      <SystemPromptSettings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
     </div>
   )
 }

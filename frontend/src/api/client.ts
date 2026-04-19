@@ -124,3 +124,23 @@ export type GoogleStatus = {
 
 export const getGoogleStatus = () => req<GoogleStatus>('/auth/google/status')
 export const disconnectGoogle = () => req<void>('/auth/google/disconnect', { method: 'POST' })
+
+// Account — AI system prompts (per transaction type)
+export type SystemPromptsSettings = {
+  default_buyer: string
+  default_seller: string
+  default_buyer_seller: string
+  override_buyer: string | null
+  override_seller: string | null
+  override_buyer_seller: string | null
+}
+
+export type SystemPromptsUpdate = {
+  override_buyer?: string | null
+  override_seller?: string | null
+  override_buyer_seller?: string | null
+}
+
+export const getSystemPrompts = () => req<SystemPromptsSettings>('/account/system-prompts')
+export const updateSystemPrompts = (data: SystemPromptsUpdate) =>
+  req<SystemPromptsSettings>('/account/system-prompts', { method: 'PUT', body: JSON.stringify(data) })

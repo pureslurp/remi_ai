@@ -12,7 +12,7 @@ class GmailAddressRule(BaseModel):
 
 class ProjectCreate(BaseModel):
     name: str
-    client_type: str  # "buyer" | "seller"
+    client_type: str  # "buyer" | "seller" | "buyer & seller"
     email_addresses: List[str] = []
     phone: Optional[str] = None
     notes: Optional[str] = None

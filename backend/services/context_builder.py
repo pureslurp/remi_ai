@@ -1,13 +1,50 @@
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 
-from models import Project, Transaction, Document, EmailThread, ChatMessage
+from models import Account, Project, Transaction, Document, EmailThread, ChatMessage
 from config import (
     BUDGET_TRANSACTION, BUDGET_PROFILE, BUDGET_DOCUMENTS,
     BUDGET_EMAILS, BUDGET_HISTORY_MESSAGES, ANTHROPIC_MODEL,
 )
 
 BASE_PERSONA = """You are REMI, an AI assistant for a Michigan real estate agent. You are an expert in Michigan real estate transactions, purchase agreements, addendums, negotiation strategy, and Michigan-specific requirements (Seller's Disclosure, PRE/tax uncapping, lead paint disclosure for pre-1978 homes). Be professional, precise, and cite specific documents or emails when you reference them."""
+
+# Role-specific strategy (combined with BASE_PERSONA for each client). Keys match Project.client_type.
+STRATEGY_DEFAULT_BUYER = """Your focus for this client is the BUY side. Help the agent with buyer negotiations and leverage strategy, purchase agreement drafting and revisions, inspection and financing contingencies, addenda, appraisal and repair negotiations, coordinating title work and the lender (conditions, CD timing), walk-through issues, and closing readiness. Prioritize protecting the buyer while keeping the deal executable."""
+
+STRATEGY_DEFAULT_SELLER = """Your focus for this client is the SELL side. Help the agent interpret and compare offers (price, concessions, contingencies, timelines), advise on counter strategy, listing and marketing angles, seller disclosures and Michigan forms, inspection response options, and keeping the transaction moving toward a clean closing."""
+
+STRATEGY_DEFAULT_BUYER_SELLER = """This client is active on BOTH buying and selling. Combine buyer-side help (negotiations, PA/addenda, title and lender coordination) with seller-side help (offer comparison, listing/marketing, seller documents). Pay special attention to coordinating closing dates, bridge timing, rent-backs, and contingent-sale addenda where a purchase depends on this (or another) closing."""
+
+DEFAULT_STRATEGY_BY_CLIENT_TYPE: dict[str, str] = {
+    "buyer": STRATEGY_DEFAULT_BUYER,
+    "seller": STRATEGY_DEFAULT_SELLER,
+    "buyer & seller": STRATEGY_DEFAULT_BUYER_SELLER,
+}
+
+
+def default_strategy_prompts_for_api() -> dict[str, str]:
+    """Canonical defaults for settings UI (snake_case keys)."""
+    return {
+        "default_buyer": STRATEGY_DEFAULT_BUYER,
+        "default_seller": STRATEGY_DEFAULT_SELLER,
+        "default_buyer_seller": STRATEGY_DEFAULT_BUYER_SELLER,
+    }
+
+
+def resolve_strategy_prompt(project: Project, account: Account | None) -> str:
+    ct = project.client_type if project.client_type in DEFAULT_STRATEGY_BY_CLIENT_TYPE else "buyer"
+    base = DEFAULT_STRATEGY_BY_CLIENT_TYPE[ct]
+    if not account:
+        return base
+    override = {
+        "buyer": account.system_prompt_buyer,
+        "seller": account.system_prompt_seller,
+        "buyer & seller": account.system_prompt_buyer_seller,
+    }[ct]
+    if override and override.strip():
+        return override.strip()
+    return base
 
 
 def _fmt_money(v):
@@ -124,14 +161,21 @@ def build_emails_section(project: Project, token_budget: int) -> str:
     return "\n\n".join(sections) if sections else "No email content available."
 
 
-def build_system_prompt(project: Project) -> list[dict]:
+def build_system_prompt(project: Project, account: Account | None = None) -> list[dict]:
     """Return a list of system content blocks with cache_control on stable sections."""
     today = datetime.now().strftime("%B %d, %Y")
+    strategy = resolve_strategy_prompt(project, account)
+    persona_block = (
+        BASE_PERSONA
+        + "\n\n--- ROLE-SPECIFIC GUIDANCE ---\n"
+        + strategy
+        + f"\n\nToday's date: {today}."
+    )
 
     return [
         {
             "type": "text",
-            "text": BASE_PERSONA + f"\n\nToday's date: {today}.",
+            "text": persona_block,
         },
         {
             "type": "text",

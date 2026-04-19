@@ -110,6 +110,17 @@ def _bootstrap_sqlite() -> None:
                     )
                 )
                 conn.commit()
+            acols = {row[1] for row in conn.execute(text("PRAGMA table_info(accounts)")).fetchall()}
+            if acols:
+                if "system_prompt_buyer" not in acols:
+                    conn.execute(text("ALTER TABLE accounts ADD COLUMN system_prompt_buyer TEXT"))
+                    conn.commit()
+                if "system_prompt_seller" not in acols:
+                    conn.execute(text("ALTER TABLE accounts ADD COLUMN system_prompt_seller TEXT"))
+                    conn.commit()
+                if "system_prompt_buyer_seller" not in acols:
+                    conn.execute(text("ALTER TABLE accounts ADD COLUMN system_prompt_buyer_seller TEXT"))
+                    conn.commit()
             acols = {row[1] for row in conn.execute(text("PRAGMA table_info(projects)")).fetchall()}
             if acols and "owner_id" not in acols:
                 conn.execute(text("ALTER TABLE projects ADD COLUMN owner_id VARCHAR"))
@@ -151,7 +162,7 @@ if is_postgres():
 else:
     _bootstrap_sqlite()
 
-from routers import projects, properties, transactions, documents, chat, auth, gmail, drive
+from routers import account, projects, properties, transactions, documents, chat, auth, gmail, drive
 
 
 class ApiNoCacheMiddleware:
@@ -222,6 +233,7 @@ if is_postgres() and GOOGLE_CLIENT_ID and not os.environ.get("FRONTEND_ORIGIN", 
         "Vercel origin (same URL as in CORS), e.g. https://your-app.vercel.app"
     )
 
+app.include_router(account.router)
 app.include_router(projects.router)
 app.include_router(properties.router)
 app.include_router(transactions.router)
