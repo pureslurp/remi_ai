@@ -1,0 +1,15 @@
+.env
+.claude/settings.local.json
+backend/.venv/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+node_modules/
+frontend/dist/
+*.egg-info/
+.venv/
+
+# Never commit these — they contain your Google OAuth credentials and tokens
+~/.remi/credentials.json
+~/.remi/google_token.json

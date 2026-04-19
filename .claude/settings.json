@@ -1,0 +1,32 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx create-vite@latest frontend --template react-ts)",
+      "Bash(npm install *)",
+      "Bash(sudo chown *)",
+      "Bash(npm run *)",
+      "Bash(chmod +x /Users/devtest/Developer/REMI_AI/run.sh)",
+      "Bash(pkill -f \"uvicorn main:app\")",
+      "Bash(rm -f ~/.remi/remi.db)",
+      "Bash(python3 -c ' *)",
+      "Bash(ps -p 10810 61044 -o pid,command)",
+      "Bash(kill 10810)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173)",
+      "Bash(open http://localhost:5173)",
+      "Bash(curl -s http://127.0.0.1:8000/api/auth/google/url)",
+      "Read(//Users/devtest/.remi/logs/**)",
+      "Bash(curl -s -X POST \"http://127.0.0.1:8000/api/projects/$\\(curl -s http://127.0.0.1:8000/api/projects)",
+      "Bash(python3 -m venv .venv)",
+      "Bash(.venv/bin/pip install *)",
+      "Bash(.venv/bin/python3 -m uvicorn main:app --host 127.0.0.1 --port 8000)",
+      "Bash(.venv/bin/python3 -c ' *)",
+      "Bash(curl -s -X POST http://127.0.0.1:8000/api/projects/__TRACKED_VAR__/chat -H 'Content-Type: application/json' -d '{\"message\":\"Hello, quick test\"}' --max-time 15)",
+      "Bash(pkill -f \"vite\")",
+      "Bash(.venv/bin/python -c ' *)",
+      "Bash(.venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload)",
+      "Bash(curl -s http://127.0.0.1:8000/health)",
+      "Bash(.venv/bin/python -c \"from models.project import Project; from database import engine; from sqlalchemy import inspect; print\\([c['name'] for c in inspect\\(engine\\).get_columns\\('projects'\\)]\\)\")",
+      "Bash(python3 -c \"import json,sys; data=json.load\\(sys.stdin\\); print\\([\\(p['name'], p.get\\('gmail_keywords'\\)\\) for p in data]\\)\")"
+    ]
+  }
+}

@@ -1,0 +1,93 @@
+export interface GmailAddressRule {
+  keywords?: string[]
+  after_date?: string | null
+}
+
+export interface Project {
+  id: string
+  name: string
+  client_type: 'buyer' | 'seller' | 'buyer & seller'
+  email_addresses: string[]
+  phone?: string
+  notes?: string
+  drive_folder_id?: string
+  drive_folder_name?: string
+  /** @deprecated Prefer gmail_address_rules; used when no per-address rule exists */
+  gmail_keywords?: string[]
+  /** Per-address optional subject keywords and/or minimum message date */
+  gmail_address_rules?: Record<string, GmailAddressRule>
+  last_gmail_sync?: string
+  last_drive_sync?: string
+  created_at: string
+  updated_at?: string
+}
+
+export interface Property {
+  id: string
+  project_id: string
+  address: string
+  city?: string
+  state?: string
+  zip_code?: string
+  mls_number?: string
+  list_price?: number
+  beds?: number
+  baths?: number
+  sqft?: number
+  status: string
+  notes?: string
+}
+
+export interface KeyDate {
+  id: string
+  transaction_id: string
+  label: string
+  due_date: string
+  completed_at?: string
+}
+
+export interface Transaction {
+  id: string
+  project_id: string
+  property_id?: string
+  offer_price?: number
+  earnest_money?: number
+  contingencies: string[]
+  status: string
+  offer_date?: string
+  accepted_date?: string
+  close_date?: string
+  notes?: string
+  created_at: string
+  key_dates: KeyDate[]
+}
+
+export interface ChatMessage {
+  id: string
+  project_id: string
+  role: 'user' | 'assistant'
+  content: string
+  created_at: string
+}
+
+export interface Document {
+  id: string
+  project_id: string
+  filename: string
+  source: 'upload' | 'drive' | 'gmail'
+  drive_file_id?: string
+  gmail_message_id?: string
+  mime_type?: string
+  size_bytes?: number
+  created_at: string
+  chunk_count: number
+}
+
+export interface EmailThread {
+  id: string
+  project_id: string
+  subject?: string
+  participants: string[]
+  last_message_date?: string
+  fetched_at: string
+}
