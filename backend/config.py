@@ -107,8 +107,25 @@ if FRONTEND_ORIGIN and FRONTEND_ORIGIN not in _seen_cors:
 
 # Optional extra allowed Origin values (Starlette regex). Use for many Vercel preview URLs
 # without listing each one, e.g. r"https://remi-ai[-\w]*\.vercel\.app"
+# Validate at import: an invalid regex would otherwise crash *every* request when
+# Starlette lazily compiles it inside CORSMiddleware.__init__ on first use.
+import re as _re
+
 _cors_regex = os.environ.get("CORS_ORIGIN_REGEX", "").strip()
-CORS_ORIGIN_REGEX: str | None = _cors_regex if _cors_regex else None
+CORS_ORIGIN_REGEX: str | None = None
+if _cors_regex:
+    try:
+        _re.compile(_cors_regex)
+        CORS_ORIGIN_REGEX = _cors_regex
+    except _re.error as _exc:
+        import logging as _logging
+
+        _logging.getLogger("remi").error(
+            "CORS_ORIGIN_REGEX %r is not a valid Python regex (%s). Ignoring it. "
+            "Use a regex like r'https://your-app[-\\w]*\\.vercel\\.app' (NOT a glob like *.vercel.app).",
+            _cors_regex,
+            _exc,
+        )
 
 # Ensure runtime dirs exist (local / SQLite mode)
 if not is_postgres():
