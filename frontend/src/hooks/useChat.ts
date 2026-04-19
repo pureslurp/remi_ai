@@ -28,6 +28,7 @@ export function useChat(projectId: string | null) {
     try {
       const res = await fetch(`${API_ROOT}/projects/${projectId}/chat`, {
         method: 'POST',
+        credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ message: text }),
         signal: abortRef.current.signal,
