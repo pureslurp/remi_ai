@@ -7,6 +7,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request
+from starlette.responses import Response
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -98,6 +101,21 @@ else:
 
 from routers import projects, properties, transactions, documents, chat, auth, gmail, drive
 
+
+class ApiNoCacheMiddleware(BaseHTTPMiddleware):
+    """
+    Railway's edge (Fastly) may cache GET /api/* responses. Probes without an Origin
+    header get 401/200 without Access-Control-Allow-Origin; serving that cached object
+    to a browser that sends Origin triggers a false CORS failure. no-store avoids it.
+    """
+
+    async def dispatch(self, request: Request, call_next) -> Response:
+        response = await call_next(request)
+        if request.url.path.startswith("/api/"):
+            response.headers["Cache-Control"] = "private, no-store"
+        return response
+
+
 app = FastAPI(title="REMI AI", version="1.0.0")
 
 app.add_middleware(
@@ -107,6 +125,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Runs outermost on the response path so headers apply after CORS.
+app.add_middleware(ApiNoCacheMiddleware)
 logger.info("CORS allow_origins=%s", CORS_ORIGINS)
 if is_postgres() and GOOGLE_CLIENT_ID and not SESSION_SECRET:
     raise SystemExit(

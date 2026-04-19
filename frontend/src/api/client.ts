@@ -4,9 +4,13 @@ const rawBase = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/
 export const API_ROOT = rawBase ? `${rawBase}/api` : '/api'
 
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
+  const method = (opts?.method ?? 'GET').toUpperCase()
+  const withJsonBody = !['GET', 'HEAD'].includes(method)
   const res = await fetch(API_ROOT + path, {
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...opts?.headers },
+    headers: withJsonBody
+      ? { 'Content-Type': 'application/json', ...opts?.headers }
+      : { ...opts?.headers },
     ...opts,
   })
   if (!res.ok) {
