@@ -1,5 +1,5 @@
 import re
-import io
+from pathlib import Path
 from datetime import datetime
 from sqlalchemy.orm import Session
 
@@ -65,6 +65,23 @@ SUPPORTED_MIME = {
     "application/vnd.google-apps.document",
 }
 
+# Drive often reports Office uploads as application/octet-stream, application/zip (docx is a zip),
+# or other generic types. Use the filename when the declared MIME is not one we handle.
+_EXT_TO_MIME = {
+    ".pdf": "application/pdf",
+    ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    ".txt": "text/plain",
+}
+
+
+def _effective_mime(filename: str, declared: str) -> str:
+    if declared in SUPPORTED_MIME:
+        return declared
+    ext = Path(filename or "").suffix.lower()
+    if ext in _EXT_TO_MIME:
+        return _EXT_TO_MIME[ext]
+    return declared
+
 
 def _download_file(drive, file: dict) -> tuple[bytes, str]:
     """Download a Drive file and return (content_bytes, mime_type)."""
@@ -94,7 +111,11 @@ def sync_drive(project: Project, db: Session) -> dict:
     skipped_count = 0
 
     for f in all_files:
-        if f["mimeType"] not in SUPPORTED_MIME:
+        name = f.get("name") or ""
+        effective = _effective_mime(name, f.get("mimeType") or "")
+        f_use = {**f, "mimeType": effective}
+
+        if f_use["mimeType"] not in SUPPORTED_MIME:
             skipped_count += 1
             continue
 
@@ -107,7 +128,7 @@ def sync_drive(project: Project, db: Session) -> dict:
             continue
 
         try:
-            content, mime = _download_file(drive, f)
+            content, mime = _download_file(drive, f_use)
             result = process_bytes(
                 project_id=project.id,
                 filename=f["name"],
