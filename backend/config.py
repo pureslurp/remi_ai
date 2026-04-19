@@ -36,6 +36,14 @@ def use_supabase_storage() -> bool:
     return bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
 
 
+def _normalize_browser_origin(value: str) -> str:
+    """Match browser `Origin` headers: trim, strip wrapping quotes, no trailing slash."""
+    o = value.strip()
+    if len(o) >= 2 and o[0] == o[-1] and o[0] in "\"'":
+        o = o[1:-1].strip()
+    return o.rstrip("/")
+
+
 # Model — NOT claude-opus-4-7, intentionally sonnet for cost/speed balance
 ANTHROPIC_MODEL = "claude-sonnet-4-6"
 MAX_TOKENS = 4096
@@ -65,15 +73,30 @@ GOOGLE_REDIRECT_URI = os.environ.get(
 ).strip()
 
 # Where the browser lands after successful Google connect
-FRONTEND_ORIGIN = os.environ.get("FRONTEND_ORIGIN", "http://localhost:5173").rstrip("/")
+FRONTEND_ORIGIN = _normalize_browser_origin(
+    os.environ.get("FRONTEND_ORIGIN", "http://localhost:5173")
+)
 
 # Web OAuth (production) — if set, used instead of ~/.remi/credentials.json
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip() or None
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "").strip() or None
 
 # CORS — comma-separated origins (include Vercel preview URLs if needed)
-_cors = os.environ.get("CORS_ORIGINS", "http://localhost:5173").strip()
-CORS_ORIGINS = [o.strip() for o in _cors.split(",") if o.strip()]
+_cors_raw = os.environ.get("CORS_ORIGINS", "http://localhost:5173").strip()
+_seen_cors: set[str] = set()
+CORS_ORIGINS: list[str] = []
+for _part in _cors_raw.split(","):
+    _o = _normalize_browser_origin(_part)
+    if _o and _o not in _seen_cors:
+        _seen_cors.add(_o)
+        CORS_ORIGINS.append(_o)
+# If FRONTEND_ORIGIN is set in env (non-default), also allow it for CORS — avoids
+# duplicating the Vercel URL in both variables. Default localhost is already in CORS.
+_env_frontend = os.environ.get("FRONTEND_ORIGIN", "").strip()
+if _env_frontend:
+    _fe = _normalize_browser_origin(_env_frontend)
+    if _fe and _fe not in CORS_ORIGINS:
+        CORS_ORIGINS = [*CORS_ORIGINS, _fe]
 
 # Ensure runtime dirs exist (local / SQLite mode)
 if not is_postgres():
