@@ -1,5 +1,6 @@
 import hashlib
 import io
+import logging
 from pathlib import Path
 from datetime import datetime
 from uuid import uuid4
@@ -8,6 +9,24 @@ from sqlalchemy.orm import Session
 from models import Document, DocumentChunk
 from config import PROJECTS_DIR
 from services import object_storage
+
+logger = logging.getLogger("remi.docs")
+
+
+def _try_write_local(project_id: str, filename: str, content: bytes) -> None:
+    """Best-effort local-disk copy when Supabase storage isn't writing.
+
+    Pure side-effect: failures are logged and swallowed because the canonical
+    record (Document + chunks) lives in Postgres, and Drive bytes can be re-fetched.
+    """
+    try:
+        doc_dir = PROJECTS_DIR / project_id / "docs"
+        doc_dir.mkdir(parents=True, exist_ok=True)
+        safe_name = Path(filename).name or "file"
+        (doc_dir / safe_name).write_bytes(content)
+    except OSError as exc:
+        logger.warning("Local doc write failed for %s/%s (%s); continuing.",
+                       project_id, filename, exc)
 
 
 def _sha256(data: bytes) -> str:
@@ -73,11 +92,8 @@ def process_upload(project_id: str, filename: str, content: bytes,
         project_id, doc_id, filename, content, mime_type or None,
     )
     if storage_key is None:
-        doc_dir = PROJECTS_DIR / project_id / "docs"
-        doc_dir.mkdir(parents=True, exist_ok=True)
-        (doc_dir / filename).write_bytes(content)
+        _try_write_local(project_id, filename, content)
 
-    # Extract and chunk
     text = _extract_text(content, mime_type, filename)
     chunks_text = _chunk_text(text)
 
@@ -128,9 +144,7 @@ def process_bytes(project_id: str, filename: str, content: bytes,
         project_id, doc_id, filename, content, mime_type or None,
     )
     if storage_key is None:
-        doc_dir = PROJECTS_DIR / project_id / "docs"
-        doc_dir.mkdir(parents=True, exist_ok=True)
-        (doc_dir / filename).write_bytes(content)
+        _try_write_local(project_id, filename, content)
 
     text = _extract_text(content, mime_type, filename)
     chunks_text = _chunk_text(text)

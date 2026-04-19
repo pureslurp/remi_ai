@@ -32,19 +32,19 @@ const buyer: ClientPanelCopy = {
 }
 
 const seller: ClientPanelCopy = {
-  transactionsSectionTitle: 'Listing & offers',
+  transactionsSectionTitle: 'Listing & buyer offers',
   transactionsSubtitle:
-    'Each row is an offer or contract on their listing — reuse the same address when comparing multiple buyers.',
+    'Their home is one listing (address and list price below). Add a row for each buyer’s offer — amount and offer date.',
   agentNotesPlaceholder:
-    'Agent notes (list price, disclosure status, timeline, staging, preferred close…)',
-  newPropertyAddressPlaceholder: 'Listing address (same for each competing offer)',
+    'Agent notes (disclosure status, timeline, staging, preferred close…)',
+  newPropertyAddressPlaceholder: 'Listing street address',
   newOfferPricePlaceholder: 'Buyer’s offer amount (e.g. 415000)',
   emptyActiveTransactions:
-    'No active offers yet. Add a row per buyer or per contract on their home.',
+    'No offers on file yet. Use “+ Add offer” after the listing is set up.',
   propertyContextLabel: 'Listing',
   transactionNotesPlaceholder:
-    'Compare to other offers: contingencies, concessions, close date, buyer strength…',
-  multiOfferSameListingHint: 'Multiple offers on the same listing — compare below.',
+    'Buyer name (if known), contingencies vs other offers, concessions, close date…',
+  multiOfferSameListingHint: '',
   panelAccentClass: 'border-l-[3px] border-l-emerald-500/70',
 }
 

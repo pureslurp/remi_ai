@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useAppStore } from '../store/appStore'
 import * as api from '../api/client'
 import type { Transaction, KeyDate, Property, Project } from '../types'
@@ -109,6 +109,7 @@ function TransactionCard({
   collapsed = false,
   propertyContextLabel,
   transactionNotesPlaceholder,
+  variant = 'default',
 }: {
   tx: Transaction
   prop?: Property
@@ -116,6 +117,7 @@ function TransactionCard({
   collapsed?: boolean
   propertyContextLabel: string
   transactionNotesPlaceholder: string
+  variant?: 'default' | 'sellerOffer'
 }) {
   const { setTransactions, transactions } = useAppStore()
   const [expanded, setExpanded] = useState(!collapsed)
@@ -152,13 +154,26 @@ function TransactionCard({
         onClick={() => setExpanded(e => !e)}
       >
         <div className="flex-1 min-w-0">
-          <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-0.5">{propertyContextLabel}</p>
-          <p className="text-sm font-medium text-white truncate">
-            {prop?.address ?? 'No property linked'}
-          </p>
-          <p className="text-xs text-gray-400 mt-0.5">
-            {fmtMoney(tx.offer_price)} · {fmtDate(tx.close_date ?? tx.offer_date)}
-          </p>
+          {variant === 'sellerOffer' ? (
+            <>
+              <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-0.5">Buyer offer</p>
+              <p className="text-sm font-medium text-white">{fmtMoney(tx.offer_price)}</p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                Offer date {fmtDate(tx.offer_date)}
+                {tx.close_date ? ` · Close ${fmtDate(tx.close_date)}` : ''}
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-0.5">{propertyContextLabel}</p>
+              <p className="text-sm font-medium text-white truncate">
+                {prop?.address ?? 'No property linked'}
+              </p>
+              <p className="text-xs text-gray-400 mt-0.5">
+                {fmtMoney(tx.offer_price)} · {fmtDate(tx.close_date ?? tx.offer_date)}
+              </p>
+            </>
+          )}
         </div>
         <div className="flex items-center gap-2 ml-2 shrink-0">
           <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${statusColor}`}>
@@ -277,8 +292,132 @@ function duplicateListingOfferHint(
   }, {})
   const hasMultipleOffersSameProperty = Object.values(counts).some(n => n > 1)
   if (!hasMultipleOffersSameProperty || !copy.multiOfferSameListingHint) return null
-  if (clientType === 'seller' || clientType === 'buyer & seller') return copy.multiOfferSameListingHint
+  if (clientType === 'buyer & seller') return copy.multiOfferSameListingHint
   return null
+}
+
+/** Single home for sale: pick the listing row from project properties + transaction links. */
+function resolveSellerListingProperty(
+  projectId: string,
+  properties: Property[],
+  txsForProject: Transaction[],
+): Property | undefined {
+  const props = properties.filter(p => p.project_id === projectId)
+  if (props.length === 0) {
+    const pids = [...new Set(txsForProject.map(t => t.property_id).filter(Boolean) as string[])]
+    if (pids.length === 1) return properties.find(p => p.id === pids[0])
+    return undefined
+  }
+  if (props.length === 1) return props[0]
+  const pidCounts: Record<string, number> = {}
+  for (const t of txsForProject) {
+    if (t.property_id) pidCounts[t.property_id] = (pidCounts[t.property_id] ?? 0) + 1
+  }
+  const ranked = Object.entries(pidCounts).sort((a, b) => b[1] - a[1])
+  if (ranked[0]) {
+    const match = props.find(p => p.id === ranked[0][0])
+    if (match) return match
+  }
+  return props[0]
+}
+
+function SellerListingEditor({
+  projectId,
+  property,
+}: {
+  projectId: string
+  property: Property
+}) {
+  const { setProperties, properties } = useAppStore()
+  const [listPrice, setListPrice] = useState(
+    property.list_price != null ? String(property.list_price) : '',
+  )
+
+  useEffect(() => {
+    setListPrice(property.list_price != null ? String(property.list_price) : '')
+  }, [property.id, property.list_price])
+
+  const saveListPrice = async () => {
+    const raw = listPrice.trim()
+    const n = raw ? parseFloat(raw.replace(/[^0-9.]/g, '')) : undefined
+    const prev = property.list_price ?? undefined
+    if (n === prev || (n === undefined && prev === undefined)) return
+    const updated = await api.updateProperty(projectId, property.id, {
+      list_price: n,
+    })
+    setProperties(properties.map(p => (p.id === updated.id ? updated : p)))
+  }
+
+  return (
+    <div className="space-y-2">
+      <div>
+        <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-0.5">Address</p>
+        <p className="text-sm font-medium text-white">{property.address}</p>
+      </div>
+      <div>
+        <label className="text-[10px] uppercase tracking-wide text-gray-500 block mb-1">List price</label>
+        <input
+          className="w-full bg-gray-700/80 rounded-lg px-2 py-1.5 text-sm text-white outline-none focus:ring-1 focus:ring-emerald-500"
+          inputMode="decimal"
+          placeholder="e.g. 425000"
+          value={listPrice}
+          onChange={e => setListPrice(e.target.value)}
+          onBlur={saveListPrice}
+        />
+      </div>
+    </div>
+  )
+}
+
+function SellerSetupListingForm({ projectId }: { projectId: string }) {
+  const { setProperties, properties } = useAppStore()
+  const [addr, setAddr] = useState('')
+  const [listPrice, setListPrice] = useState('')
+  const [saving, setSaving] = useState(false)
+
+  const submit = async () => {
+    if (!addr.trim() || saving) return
+    setSaving(true)
+    try {
+      const lp = listPrice.trim() ? parseFloat(listPrice.replace(/[^0-9.]/g, '')) : undefined
+      const prop = await api.createProperty(projectId, {
+        address: addr.trim(),
+        list_price: lp,
+      })
+      setProperties([...properties, prop])
+      setAddr('')
+      setListPrice('')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <div className="space-y-2">
+      <p className="text-xs text-gray-400">Add the home they are selling — offers go underneath.</p>
+      <input
+        className="w-full bg-gray-700/80 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-emerald-500"
+        placeholder="Listing street address"
+        value={addr}
+        onChange={e => setAddr(e.target.value)}
+      />
+      <input
+        className="w-full bg-gray-700/80 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-emerald-500"
+        inputMode="decimal"
+        placeholder="List price (e.g. 425000)"
+        value={listPrice}
+        onChange={e => setListPrice(e.target.value)}
+      />
+      <button
+        type="button"
+        onClick={submit}
+        disabled={!addr.trim() || saving}
+        className="w-full py-1.5 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 rounded-lg text-xs font-medium transition"
+      >
+        {saving ? 'Saving…' : 'Save listing'}
+      </button>
+    </div>
+  )
 }
 
 export default function TransactionPanel({ projectId, clientType, properties, transactions }: Props) {
@@ -287,6 +426,7 @@ export default function TransactionPanel({ projectId, clientType, properties, tr
   const [showHistory, setShowHistory] = useState(false)
   const [newOffer, setNewOffer] = useState('')
   const [newClose, setNewClose] = useState('')
+  const [newOfferDate, setNewOfferDate] = useState('')
   const [newPropAddr, setNewPropAddr] = useState('')
 
   const copy = getClientPanelCopy(clientType)
@@ -294,6 +434,25 @@ export default function TransactionPanel({ projectId, clientType, properties, tr
   const activeTxs = txsForProject.filter(t => !['closed', 'dead'].includes(t.status))
   const pastTxs = txsForProject.filter(t => ['closed', 'dead'].includes(t.status))
   const listingHint = duplicateListingOfferHint(clientType, activeTxs, copy)
+  const listingProp =
+    clientType === 'seller' ? resolveSellerListingProperty(projectId, properties, txsForProject) : undefined
+
+  const offerCardVariant = (tx: Transaction): 'default' | 'sellerOffer' =>
+    clientType === 'seller' && listingProp && tx.property_id === listingProp.id ? 'sellerOffer' : 'default'
+
+  const createSellerOffer = async () => {
+    if (!listingProp) return
+    const tx = await api.createTransaction(projectId, {
+      property_id: listingProp.id,
+      offer_price: newOffer ? parseFloat(newOffer.replace(/[^0-9.]/g, '')) : undefined,
+      offer_date: newOfferDate ? new Date(newOfferDate).toISOString() : undefined,
+      status: 'active',
+    })
+    setTransactions([...txsForProject, tx])
+    setAddingTx(false)
+    setNewOffer('')
+    setNewOfferDate('')
+  }
 
   const createTx = async () => {
     let propertyId: string | undefined
@@ -315,6 +474,144 @@ export default function TransactionPanel({ projectId, clientType, properties, tr
     setNewPropAddr('')
   }
 
+  if (clientType === 'seller') {
+    return (
+      <div>
+        <p className="text-xs text-gray-500 mb-2">{copy.transactionsSubtitle}</p>
+
+        <div className="bg-gray-800/60 rounded-xl p-3 mb-4 border border-gray-700/40">
+          <p className="text-[10px] uppercase font-semibold tracking-wide text-emerald-400/90 mb-2">Listing</p>
+          {listingProp ? (
+            <SellerListingEditor projectId={projectId} property={listingProp} />
+          ) : (
+            <SellerSetupListingForm projectId={projectId} />
+          )}
+        </div>
+
+        {listingProp && (
+          <>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-gray-400">Buyer offers</p>
+              <button
+                type="button"
+                onClick={() => {
+                  setAddingTx(a => !a)
+                  setNewOffer('')
+                  setNewOfferDate('')
+                }}
+                className="text-xs text-emerald-400 hover:text-emerald-300 transition"
+              >
+                + Add offer
+              </button>
+            </div>
+
+            {addingTx && (
+              <div className="bg-gray-800 rounded-xl p-3 mb-3 space-y-2 border border-gray-700/40">
+                <input
+                  className="w-full bg-gray-700 rounded px-2 py-1.5 text-xs outline-none"
+                  placeholder={copy.newOfferPricePlaceholder}
+                  value={newOffer}
+                  onChange={e => setNewOffer(e.target.value)}
+                />
+                <div className="flex items-center gap-2">
+                  <label className="text-xs text-gray-400 shrink-0">Offer date</label>
+                  <input
+                    type="date"
+                    className="flex-1 bg-gray-700 rounded px-2 py-1 text-xs outline-none"
+                    value={newOfferDate}
+                    onChange={e => setNewOfferDate(e.target.value)}
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddingTx(false)
+                      setNewOffer('')
+                      setNewOfferDate('')
+                    }}
+                    className="flex-1 py-1.5 bg-gray-700 rounded text-xs hover:bg-gray-600 transition"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    onClick={createSellerOffer}
+                    className="flex-1 py-1.5 bg-emerald-600 rounded text-xs hover:bg-emerald-500 transition"
+                  >
+                    Add offer
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {activeTxs.length === 0 && !addingTx && (
+              <p className="text-xs text-gray-500 mb-2">{copy.emptyActiveTransactions}</p>
+            )}
+
+            {activeTxs.map(tx => (
+              <TransactionCard
+                key={tx.id}
+                variant={offerCardVariant(tx)}
+                tx={tx}
+                prop={properties.find(p => p.id === tx.property_id)}
+                projectId={projectId}
+                propertyContextLabel={copy.propertyContextLabel}
+                transactionNotesPlaceholder={copy.transactionNotesPlaceholder}
+              />
+            ))}
+          </>
+        )}
+
+        {!listingProp && activeTxs.length > 0 && (
+          <div className="mb-3">
+            <p className="text-xs text-amber-500/90 mb-2">
+              These rows pre-date a saved listing. Add the listing above, then use “+ Add offer” so new
+              offers attach to one address and list price.
+            </p>
+            {activeTxs.map(tx => (
+              <TransactionCard
+                key={tx.id}
+                variant="default"
+                tx={tx}
+                prop={properties.find(p => p.id === tx.property_id)}
+                projectId={projectId}
+                propertyContextLabel={copy.propertyContextLabel}
+                transactionNotesPlaceholder={copy.transactionNotesPlaceholder}
+              />
+            ))}
+          </div>
+        )}
+
+        {pastTxs.length > 0 && (
+          <div className="mt-3">
+            <button
+              type="button"
+              onClick={() => setShowHistory(h => !h)}
+              className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition mb-2"
+            >
+              <span>{showHistory ? '▼' : '▶'}</span>
+              <span>Past offers ({pastTxs.length})</span>
+            </button>
+            {showHistory &&
+              pastTxs.map(tx => (
+                <TransactionCard
+                  key={tx.id}
+                  variant={offerCardVariant(tx)}
+                  tx={tx}
+                  prop={properties.find(p => p.id === tx.property_id)}
+                  projectId={projectId}
+                  collapsed={true}
+                  propertyContextLabel={copy.propertyContextLabel}
+                  transactionNotesPlaceholder={copy.transactionNotesPlaceholder}
+                />
+              ))}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   return (
     <div>
       <p className="text-xs text-gray-500 mb-2">{copy.transactionsSubtitle}</p>
@@ -323,6 +620,7 @@ export default function TransactionPanel({ projectId, clientType, properties, tr
       )}
       <div className="flex justify-end mb-2">
         <button
+          type="button"
           onClick={() => setAddingTx(!addingTx)}
           className="text-xs text-blue-400 hover:text-blue-300 transition"
         >
@@ -354,8 +652,8 @@ export default function TransactionPanel({ projectId, clientType, properties, tr
             />
           </div>
           <div className="flex gap-2">
-            <button onClick={() => setAddingTx(false)} className="flex-1 py-1.5 bg-gray-700 rounded text-xs hover:bg-gray-600 transition">Cancel</button>
-            <button onClick={createTx} className="flex-1 py-1.5 bg-blue-600 rounded text-xs hover:bg-blue-500 transition">Create</button>
+            <button type="button" onClick={() => setAddingTx(false)} className="flex-1 py-1.5 bg-gray-700 rounded text-xs hover:bg-gray-600 transition">Cancel</button>
+            <button type="button" onClick={createTx} className="flex-1 py-1.5 bg-blue-600 rounded text-xs hover:bg-blue-500 transition">Create</button>
           </div>
         </div>
       )}
@@ -367,6 +665,7 @@ export default function TransactionPanel({ projectId, clientType, properties, tr
       {activeTxs.map(tx => (
         <TransactionCard
           key={tx.id}
+          variant="default"
           tx={tx}
           prop={properties.find(p => p.id === tx.property_id)}
           projectId={projectId}
@@ -379,23 +678,26 @@ export default function TransactionPanel({ projectId, clientType, properties, tr
       {pastTxs.length > 0 && (
         <div>
           <button
+            type="button"
             onClick={() => setShowHistory(h => !h)}
             className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition mb-2"
           >
             <span>{showHistory ? '▼' : '▶'}</span>
             <span>Past transactions ({pastTxs.length})</span>
           </button>
-          {showHistory && pastTxs.map(tx => (
-            <TransactionCard
-              key={tx.id}
-              tx={tx}
-              prop={properties.find(p => p.id === tx.property_id)}
-              projectId={projectId}
-              collapsed={true}
-              propertyContextLabel={copy.propertyContextLabel}
-              transactionNotesPlaceholder={copy.transactionNotesPlaceholder}
-            />
-          ))}
+          {showHistory &&
+            pastTxs.map(tx => (
+              <TransactionCard
+                key={tx.id}
+                variant="default"
+                tx={tx}
+                prop={properties.find(p => p.id === tx.property_id)}
+                projectId={projectId}
+                collapsed={true}
+                propertyContextLabel={copy.propertyContextLabel}
+                transactionNotesPlaceholder={copy.transactionNotesPlaceholder}
+              />
+            ))}
         </div>
       )}
     </div>
