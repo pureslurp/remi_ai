@@ -27,13 +27,20 @@ def get_messages(project: ProjectForUser, db: Session = Depends(get_db)):
 async def chat(project: ProjectForUser, body: ChatRequest, request: Request, db: Session = Depends(get_db)):
     from services.context_builder import build_system_prompt, load_history
 
+    # Snapshot before commit + before the request session is closed by the
+    # get_db dependency. db.commit() expires every ORM instance, and the
+    # session is closed before Starlette starts iterating the StreamingResponse,
+    # so any later attribute access on `project` would raise DetachedInstanceError.
+    project_id = project.id
     system = build_system_prompt(project)
     history = load_history(project, db)
-    db.add(ChatMessage(project_id=project.id, role="user", content=body.message))
+    user_message = body.message
+
+    db.add(ChatMessage(project_id=project_id, role="user", content=user_message))
     db.commit()
 
     async def event_stream():
-        async for chunk in stream_chat(project.id, body.message, system, history, request):
+        async for chunk in stream_chat(project_id, user_message, system, history, request):
             yield chunk
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
