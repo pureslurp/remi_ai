@@ -38,32 +38,74 @@ def extract_folder_id(url_or_id: str) -> str:
     return match.group(1) if match else url_or_id.strip()
 
 
+_MAX_FILES = 5000  # hard cap so a misconfigured folder graph can't OOM the worker.
+
+
 def _list_all_files(drive, folder_id: str) -> list[dict]:
-    """Recursively list all non-trashed files in a Drive folder (incl. shared drives)."""
+    """Iteratively list all non-trashed files under a Drive folder (incl. shared drives + shortcuts).
+
+    Uses a visited-set so folder shortcuts that loop back (e.g. a shortcut inside a folder
+    pointing to its ancestor) cannot recurse infinitely.
+    """
     files: list[dict] = []
-    page_token = None
-    while True:
-        kwargs = dict(
-            q=f"'{folder_id}' in parents and trashed=false",
-            fields="nextPageToken, files(id, name, mimeType, size, modifiedTime, md5Checksum, shortcutDetails)",
-            pageSize=100,
-            supportsAllDrives=True,
-            includeItemsFromAllDrives=True,
-        )
-        if page_token:
-            kwargs["pageToken"] = page_token
-        resp = drive.files().list(**kwargs).execute()
-        for f in resp.get("files", []):
-            mt = f.get("mimeType")
-            if mt == "application/vnd.google-apps.folder":
-                files.extend(_list_all_files(drive, f["id"]))
-                continue
-            if mt == "application/vnd.google-apps.shortcut":
-                target = (f.get("shortcutDetails") or {}).get("targetMimeType")
-                target_id = (f.get("shortcutDetails") or {}).get("targetId")
-                if target_id and target == "application/vnd.google-apps.folder":
-                    files.extend(_list_all_files(drive, target_id))
-                elif target_id:
+    visited: set[str] = set()
+    seen_files: set[str] = set()  # de-dup file ids reached via multiple shortcut paths
+    pending: list[str] = [folder_id]
+
+    while pending:
+        if len(files) >= _MAX_FILES:
+            logger.warning("Drive: reached %d-file cap, stopping traversal", _MAX_FILES)
+            break
+
+        current = pending.pop()
+        if current in visited:
+            continue
+        visited.add(current)
+
+        page_token = None
+        while True:
+            kwargs = dict(
+                q=f"'{current}' in parents and trashed=false",
+                fields=(
+                    "nextPageToken, files(id, name, mimeType, size, modifiedTime, "
+                    "md5Checksum, shortcutDetails)"
+                ),
+                pageSize=100,
+                supportsAllDrives=True,
+                includeItemsFromAllDrives=True,
+            )
+            if page_token:
+                kwargs["pageToken"] = page_token
+
+            try:
+                resp = drive.files().list(**kwargs).execute()
+            except Exception:
+                logger.exception("Drive: list failed for folder %s", current)
+                break
+
+            for f in resp.get("files", []):
+                mt = f.get("mimeType")
+                fid = f.get("id")
+                if not fid:
+                    continue
+
+                if mt == "application/vnd.google-apps.folder":
+                    if fid not in visited:
+                        pending.append(fid)
+                    continue
+
+                if mt == "application/vnd.google-apps.shortcut":
+                    sd = f.get("shortcutDetails") or {}
+                    target_mime = sd.get("targetMimeType")
+                    target_id = sd.get("targetId")
+                    if not target_id:
+                        continue
+                    if target_mime == "application/vnd.google-apps.folder":
+                        if target_id not in visited:
+                            pending.append(target_id)
+                        continue
+                    if target_id in seen_files:
+                        continue
                     try:
                         meta = (
                             drive.files()
@@ -74,14 +116,26 @@ def _list_all_files(drive, folder_id: str) -> list[dict]:
                             )
                             .execute()
                         )
-                        files.append(meta)
                     except Exception:
                         logger.exception("Drive: failed to resolve shortcut target %s", target_id)
-                continue
-            files.append(f)
-        page_token = resp.get("nextPageToken")
-        if not page_token:
-            break
+                        continue
+                    if meta.get("id") and meta["id"] not in seen_files:
+                        seen_files.add(meta["id"])
+                        files.append(meta)
+                    continue
+
+                if fid in seen_files:
+                    continue
+                seen_files.add(fid)
+                files.append(f)
+
+                if len(files) >= _MAX_FILES:
+                    break
+
+            page_token = resp.get("nextPageToken")
+            if not page_token or len(files) >= _MAX_FILES:
+                break
+
     return files
 
 
