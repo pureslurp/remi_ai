@@ -3,15 +3,31 @@ import type { Project, Property, Transaction, KeyDate, ChatMessage, Document, Em
 const rawBase = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') || ''
 export const API_ROOT = rawBase ? `${rawBase}/api` : '/api'
 
+function headersToRecord(init: HeadersInit | undefined): Record<string, string> {
+  if (!init) return {}
+  if (init instanceof Headers) {
+    const o: Record<string, string> = {}
+    init.forEach((v, k) => {
+      o[k] = v
+    })
+    return o
+  }
+  if (Array.isArray(init)) return Object.fromEntries(init)
+  return { ...init }
+}
+
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
   const method = (opts?.method ?? 'GET').toUpperCase()
   const withJsonBody = !['GET', 'HEAD'].includes(method)
+  const { headers: extraInit, ...restOpts } = opts ?? {}
+  const merged: Record<string, string> = headersToRecord(extraInit)
+  if (withJsonBody && !merged['Content-Type'] && !merged['content-type']) {
+    merged['Content-Type'] = 'application/json'
+  }
   const res = await fetch(API_ROOT + path, {
+    ...restOpts,
     credentials: 'include',
-    headers: withJsonBody
-      ? { 'Content-Type': 'application/json', ...opts?.headers }
-      : { ...opts?.headers },
-    ...opts,
+    headers: merged,
   })
   if (!res.ok) {
     const text = await res.text()

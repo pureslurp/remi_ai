@@ -13,7 +13,7 @@ from starlette.responses import Response
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-from config import CORS_ORIGINS, GOOGLE_CLIENT_ID, LOGS_DIR, is_postgres, SESSION_SECRET
+from config import CORS_ORIGIN_REGEX, CORS_ORIGINS, GOOGLE_CLIENT_ID, LOGS_DIR, is_postgres, SESSION_SECRET
 from sqlalchemy import text
 
 # Configure logging to file + console (file optional if not writable)
@@ -106,13 +106,22 @@ class ApiNoCacheMiddleware(BaseHTTPMiddleware):
     """
     Railway's edge (Fastly) may cache GET /api/* responses. Probes without an Origin
     header get 401/200 without Access-Control-Allow-Origin; serving that cached object
-    to a browser that sends Origin triggers a false CORS failure. no-store avoids it.
+    to a browser that sends Origin triggers a false CORS failure. Strong no-store +
+    Vary: Origin reduces bad cache hits; Surrogate-Control helps Fastly skip cache.
     """
 
     async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)
         if request.url.path.startswith("/api/"):
-            response.headers["Cache-Control"] = "private, no-store"
+            response.headers["Cache-Control"] = "private, no-store, must-revalidate"
+            response.headers["Pragma"] = "no-cache"
+            response.headers["Expires"] = "0"
+            response.headers["Surrogate-Control"] = "no-store"
+            existing = (response.headers.get("vary") or "").strip()
+            parts = [p.strip() for p in existing.split(",") if p.strip()] if existing else []
+            if "Origin" not in parts:
+                parts.append("Origin")
+            response.headers["vary"] = ", ".join(parts)
         return response
 
 
@@ -121,13 +130,18 @@ app = FastAPI(title="REMI AI", version="1.0.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=CORS_ORIGINS,
+    allow_origin_regex=CORS_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 # Runs outermost on the response path so headers apply after CORS.
 app.add_middleware(ApiNoCacheMiddleware)
-logger.info("CORS allow_origins=%s", CORS_ORIGINS)
+logger.info(
+    "CORS allow_origins=%s allow_origin_regex=%s",
+    CORS_ORIGINS,
+    CORS_ORIGIN_REGEX or "(none)",
+)
 if is_postgres() and GOOGLE_CLIENT_ID and not SESSION_SECRET:
     raise SystemExit(
         "SESSION_SECRET is required when DATABASE_URL is Postgres and GOOGLE_CLIENT_ID is set. "

@@ -98,6 +98,11 @@ if _env_frontend:
     if _fe and _fe not in CORS_ORIGINS:
         CORS_ORIGINS = [*CORS_ORIGINS, _fe]
 
+# Optional extra allowed Origin values (Starlette regex). Use for many Vercel preview URLs
+# without listing each one, e.g. r"https://remi-ai[-\w]*\.vercel\.app"
+_cors_regex = os.environ.get("CORS_ORIGIN_REGEX", "").strip()
+CORS_ORIGIN_REGEX: str | None = _cors_regex if _cors_regex else None
+
 # Ensure runtime dirs exist (local / SQLite mode)
 if not is_postgres():
     for _dir in (REMI_HOME, PROJECTS_DIR, LOGS_DIR):
