@@ -1,5 +1,7 @@
 import logging
 import os
+import time
+import traceback
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -15,7 +17,8 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 from config import CORS_ORIGIN_REGEX, CORS_ORIGINS, GOOGLE_CLIENT_ID, LOGS_DIR, is_postgres, SESSION_SECRET
 from sqlalchemy import text
 
-# Configure logging to file + console (file optional if not writable)
+# Configure logging to file + console (file optional if not writable).
+# force=True so any prior basicConfig (e.g. from a transitive import) does not win.
 _log_handlers = [logging.StreamHandler()]
 try:
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
@@ -27,13 +30,29 @@ logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
     handlers=_log_handlers,
+    force=True,
 )
 logger = logging.getLogger("remi")
 
 from database import engine, Base
 import models  # ensure all ORM models are registered
 
-if is_postgres():
+# Tracks last DB bootstrap result; surfaced at /api/health so we can diagnose
+# a sick container without crashing the whole process at import time.
+DB_INIT_STATUS: dict = {"ok": False, "ran_at": None, "duration_ms": None, "error": None}
+
+
+def _bootstrap_postgres() -> None:
+    """Run Alembic upgrade head, but never let it kill the process.
+
+    If a migration hangs or errors, /api/health stays available with the
+    error so we can see what's wrong on Railway.
+    """
+    from alembic.config import Config
+    from alembic import command
+    from sqlalchemy import create_engine
+
+    started = time.monotonic()
     _dbu = urlparse(os.environ.get("DATABASE_URL", ""))
     logger.info(
         "Postgres target host=%s port=%s user=%s database=%s",
@@ -42,61 +61,120 @@ if is_postgres():
         _dbu.username,
         (_dbu.path or "/").lstrip("/") or "postgres",
     )
-    if _dbu.hostname and "pooler.supabase.com" in _dbu.hostname:
-        if _dbu.username == "postgres":
-            logger.warning(
-                "DATABASE_URL user is 'postgres' but host is the Supavisor pooler. "
-                "Session pooler strings almost always need user postgres.<YOUR_PROJECT_REF> "
-                "(copy the full URI from Supabase → Connect → Session pooler). "
-                "Wrong user causes auth failure and 502 on boot."
-            )
-    from alembic.config import Config
-    from alembic import command
+    if _dbu.hostname and "pooler.supabase.com" in _dbu.hostname and _dbu.username == "postgres":
+        logger.warning(
+            "DATABASE_URL user is 'postgres' but host is the Supavisor pooler. "
+            "Session pooler strings need user postgres.<PROJECT_REF>. Wrong user -> auth failure / hang."
+        )
+
+    # Optional: separate connection for migrations only. Use this if the runtime
+    # pooler hangs on advisory locks or DDL (set MIGRATION_DATABASE_URL to the
+    # direct, non-pooler Supabase URL on Railway).
+    migration_url = os.environ.get("MIGRATION_DATABASE_URL", "").strip() or None
+    if migration_url:
+        logger.info("Using MIGRATION_DATABASE_URL for alembic upgrade (separate from runtime URL)")
 
     _alembic_ini = Path(__file__).parent / "alembic.ini"
-    command.upgrade(Config(str(_alembic_ini)), "head")
-else:
-    Base.metadata.create_all(bind=engine)
+    cfg = Config(str(_alembic_ini))
+    if migration_url:
+        cfg.set_main_option("sqlalchemy.url", migration_url.replace("%", "%%"))
 
-    with engine.connect() as conn:
-        cols = {row[1] for row in conn.execute(text("PRAGMA table_info(projects)")).fetchall()}
-        if cols and "gmail_address_rules" not in cols:
-            conn.execute(text("ALTER TABLE projects ADD COLUMN gmail_address_rules TEXT DEFAULT '{}'"))
-            conn.commit()
-        dcols = {row[1] for row in conn.execute(text("PRAGMA table_info(documents)")).fetchall()}
-        if dcols and "storage_object_key" not in dcols:
-            conn.execute(text("ALTER TABLE documents ADD COLUMN storage_object_key VARCHAR"))
-            conn.commit()
-        # Multi-tenant: accounts + project.owner_id (SQLite single implicit user "local")
-        tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()}
-        if "accounts" not in tables:
+    # Bound the migration so a stuck advisory lock or query is visible
+    # within ~60s instead of silently hanging forever.
+    mig_engine = create_engine(
+        migration_url or os.environ["DATABASE_URL"],
+        connect_args={"connect_timeout": 15},
+        pool_pre_ping=True,
+    )
+    try:
+        with mig_engine.connect() as c:
+            c.execute(text("SET lock_timeout = '30s'"))
+            c.execute(text("SET statement_timeout = '60s'"))
+            c.execute(text("SET idle_in_transaction_session_timeout = '60s'"))
+        logger.info("Alembic: starting upgrade head")
+        command.upgrade(cfg, "head")
+        logger.info("Alembic: upgrade head completed in %.0fms", (time.monotonic() - started) * 1000)
+        DB_INIT_STATUS.update(
+            ok=True,
+            ran_at=time.time(),
+            duration_ms=int((time.monotonic() - started) * 1000),
+            error=None,
+        )
+    except Exception as exc:
+        tb = traceback.format_exc()
+        logger.error("Alembic upgrade FAILED: %s\n%s", exc, tb)
+        DB_INIT_STATUS.update(
+            ok=False,
+            ran_at=time.time(),
+            duration_ms=int((time.monotonic() - started) * 1000),
+            error=f"{type(exc).__name__}: {exc}",
+        )
+    finally:
+        mig_engine.dispose()
+
+
+def _bootstrap_sqlite() -> None:
+    started = time.monotonic()
+    try:
+        Base.metadata.create_all(bind=engine)
+        with engine.connect() as conn:
+            cols = {row[1] for row in conn.execute(text("PRAGMA table_info(projects)")).fetchall()}
+            if cols and "gmail_address_rules" not in cols:
+                conn.execute(text("ALTER TABLE projects ADD COLUMN gmail_address_rules TEXT DEFAULT '{}'"))
+                conn.commit()
+            dcols = {row[1] for row in conn.execute(text("PRAGMA table_info(documents)")).fetchall()}
+            if dcols and "storage_object_key" not in dcols:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN storage_object_key VARCHAR"))
+                conn.commit()
+            tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()}
+            if "accounts" not in tables:
+                conn.execute(
+                    text(
+                        "CREATE TABLE accounts (id VARCHAR NOT NULL PRIMARY KEY, email VARCHAR, "
+                        "name VARCHAR, picture VARCHAR, created_at DATETIME, updated_at DATETIME)"
+                    )
+                )
+                conn.commit()
+            acols = {row[1] for row in conn.execute(text("PRAGMA table_info(projects)")).fetchall()}
+            if acols and "owner_id" not in acols:
+                conn.execute(text("ALTER TABLE projects ADD COLUMN owner_id VARCHAR"))
+                conn.commit()
             conn.execute(
                 text(
-                    "CREATE TABLE accounts (id VARCHAR NOT NULL PRIMARY KEY, email VARCHAR, "
-                    "name VARCHAR, picture VARCHAR, created_at DATETIME, updated_at DATETIME)"
+                    "INSERT OR IGNORE INTO accounts (id, email, name, picture, created_at, updated_at) "
+                    "VALUES ('local', 'local@sqlite', NULL, NULL, datetime('now'), datetime('now'))"
                 )
             )
             conn.commit()
-        acols = {row[1] for row in conn.execute(text("PRAGMA table_info(projects)")).fetchall()}
-        if acols and "owner_id" not in acols:
-            conn.execute(text("ALTER TABLE projects ADD COLUMN owner_id VARCHAR"))
+            conn.execute(text("UPDATE projects SET owner_id = 'local' WHERE owner_id IS NULL"))
             conn.commit()
-        conn.execute(
-            text(
-                "INSERT OR IGNORE INTO accounts (id, email, name, picture, created_at, updated_at) "
-                "VALUES ('local', 'local@sqlite', NULL, NULL, datetime('now'), datetime('now'))"
-            )
+            try:
+                conn.execute(
+                    text("UPDATE google_oauth_credentials SET id = 'local' WHERE id = 'default'")
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+        DB_INIT_STATUS.update(
+            ok=True,
+            ran_at=time.time(),
+            duration_ms=int((time.monotonic() - started) * 1000),
+            error=None,
         )
-        conn.commit()
-        conn.execute(text("UPDATE projects SET owner_id = 'local' WHERE owner_id IS NULL"))
-        conn.commit()
-        try:
-            conn.execute(
-                text("UPDATE google_oauth_credentials SET id = 'local' WHERE id = 'default'")
-            )
-            conn.commit()
-        except Exception:
-            conn.rollback()
+    except Exception as exc:
+        logger.error("SQLite bootstrap FAILED: %s\n%s", exc, traceback.format_exc())
+        DB_INIT_STATUS.update(
+            ok=False,
+            ran_at=time.time(),
+            duration_ms=int((time.monotonic() - started) * 1000),
+            error=f"{type(exc).__name__}: {exc}",
+        )
+
+
+if is_postgres():
+    _bootstrap_postgres()
+else:
+    _bootstrap_sqlite()
 
 from routers import projects, properties, transactions, documents, chat, auth, gmail, drive
 
@@ -157,9 +235,9 @@ logger.info(
     CORS_ORIGIN_REGEX or "(none)",
 )
 if is_postgres() and GOOGLE_CLIENT_ID and not SESSION_SECRET:
-    raise SystemExit(
-        "SESSION_SECRET is required when DATABASE_URL is Postgres and GOOGLE_CLIENT_ID is set. "
-        "Add a long random string to Railway (and .env locally), then redeploy."
+    logger.error(
+        "SESSION_SECRET is REQUIRED when DATABASE_URL is Postgres and GOOGLE_CLIENT_ID is set. "
+        "Auth endpoints will return 500. Set SESSION_SECRET on Railway (long random string) and redeploy."
     )
 
 if is_postgres() and GOOGLE_CLIENT_ID and not os.environ.get("FRONTEND_ORIGIN", "").strip():
@@ -181,13 +259,20 @@ app.include_router(drive.router)
 
 @app.get("/api/health")
 def health():
-    out: dict = {"status": "ok"}
+    """Always returns 200 so we can see container state even when DB is sick."""
+    out: dict = {
+        "status": "ok",
+        "db_init_ok": bool(DB_INIT_STATUS.get("ok")),
+    }
+    if not DB_INIT_STATUS.get("ok") and DB_INIT_STATUS.get("error"):
+        out["db_init_error"] = DB_INIT_STATUS["error"]
     if os.environ.get("REMIP_DEBUG", "").strip().lower() in ("1", "true", "yes"):
         out["cors_origins"] = list(CORS_ORIGINS)
         out["cors_origin_regex"] = CORS_ORIGIN_REGEX
         out["postgres"] = bool(is_postgres())
         out["has_google_client_id"] = bool(GOOGLE_CLIENT_ID)
         out["has_session_secret"] = bool(SESSION_SECRET)
+        out["db_init"] = DB_INIT_STATUS
     return out
 
 
