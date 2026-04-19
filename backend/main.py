@@ -276,6 +276,61 @@ def health():
     return out
 
 
+@app.get("/api/debug/db")
+def debug_db():
+    """Counts and ownership snapshot of the live DB. Requires REMIP_DEBUG=1.
+
+    Use this to verify which Supabase project the backend is talking to and
+    whether your data is there but owned by a different account_id.
+    """
+    if os.environ.get("REMIP_DEBUG", "").strip().lower() not in ("1", "true", "yes"):
+        return {"error": "REMIP_DEBUG not enabled"}
+
+    out: dict = {"db": "postgres" if is_postgres() else "sqlite"}
+    try:
+        with engine.connect() as c:
+            if is_postgres():
+                out["server_version"] = c.execute(text("SHOW server_version")).scalar()
+                out["current_database"] = c.execute(text("SELECT current_database()")).scalar()
+                out["current_user"] = c.execute(text("SELECT current_user")).scalar()
+                row = c.execute(text("SELECT inet_server_addr()::text, inet_server_port()")).fetchone()
+                if row:
+                    out["server_addr"] = row[0]
+                    out["server_port"] = row[1]
+                ver = c.execute(text("SELECT version_num FROM alembic_version")).fetchone()
+                out["alembic_version"] = ver[0] if ver else None
+
+            tables = ["accounts", "projects", "google_oauth_credentials", "documents", "email_threads", "email_messages"]
+            counts: dict = {}
+            for t in tables:
+                try:
+                    counts[t] = c.execute(text(f"SELECT count(*) FROM {t}")).scalar()
+                except Exception as exc:
+                    counts[t] = f"error: {type(exc).__name__}: {exc}"
+            out["counts"] = counts
+
+            try:
+                rows = c.execute(
+                    text(
+                        "SELECT owner_id, count(*) AS n FROM projects GROUP BY owner_id ORDER BY n DESC"
+                    )
+                ).fetchall()
+                out["projects_by_owner"] = [{"owner_id": r[0], "count": r[1]} for r in rows]
+            except Exception as exc:
+                out["projects_by_owner_error"] = f"{type(exc).__name__}: {exc}"
+
+            try:
+                rows = c.execute(
+                    text("SELECT id, email, name FROM accounts ORDER BY created_at NULLS LAST")
+                ).fetchall()
+                out["accounts"] = [{"id": r[0], "email": r[1], "name": r[2]} for r in rows]
+            except Exception as exc:
+                out["accounts_error"] = f"{type(exc).__name__}: {exc}"
+    except Exception as exc:
+        out["error"] = f"{type(exc).__name__}: {exc}"
+    return out
+
+
 # Serve built frontend in production (single-origin deploy)
 frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
 if frontend_dist.exists():
