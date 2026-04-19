@@ -1,7 +1,12 @@
 import { useState } from 'react'
 import * as api from '../api/client'
 
-export default function LoginScreen() {
+type Props = {
+  /** Server already has Google linked, but this browser never finished OAuth — same button, different copy. */
+  needsDeviceLink?: boolean
+}
+
+export default function LoginScreen({ needsDeviceLink }: Props) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -32,8 +37,17 @@ export default function LoginScreen() {
         </div>
         <h1 className="text-2xl font-semibold text-white mb-2">REMI AI</h1>
         <p className="text-gray-400 text-sm mb-8">
-          Sign in with Google to access your clients, chat, and Gmail / Drive sync. Your data stays
-          available after this one-time connect.
+          {needsDeviceLink ? (
+            <>
+              This workspace is linked to Google on the server, but <strong className="text-gray-300">this browser</strong>{' '}
+              has not signed in yet. Continue with Google once to unlock REMI on this device.
+            </>
+          ) : (
+            <>
+              Sign in with Google to access your clients, chat, and Gmail / Drive sync. Each browser you use
+              signs in once.
+            </>
+          )}
         </p>
 
         {error && (
@@ -73,7 +87,7 @@ export default function LoginScreen() {
                   d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
                 />
               </svg>
-              Sign in with Google
+              {needsDeviceLink ? 'Continue with Google' : 'Sign in with Google'}
             </>
           )}
         </button>

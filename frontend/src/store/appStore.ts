@@ -1,6 +1,12 @@
 import { create } from 'zustand'
 import type { Project, Property, Transaction, ChatMessage, Document, EmailThread } from '../types'
 
+export type GoogleUserProfile = {
+  email?: string
+  name?: string
+  picture?: string
+}
+
 interface AppStore {
   projects: Project[]
   activeProjectId: string | null
@@ -10,6 +16,7 @@ interface AppStore {
   documents: Document[]
   emailThreads: EmailThread[]
   googleConnected: boolean
+  googleUser: GoogleUserProfile | null
   streamingContent: string
   isStreaming: boolean
 
@@ -22,6 +29,7 @@ interface AppStore {
   setDocuments: (docs: Document[]) => void
   setEmailThreads: (threads: EmailThread[]) => void
   setGoogleConnected: (v: boolean) => void
+  setGoogleUser: (u: GoogleUserProfile | null) => void
   setStreamingContent: (text: string) => void
   setIsStreaming: (v: boolean) => void
 }
@@ -35,6 +43,7 @@ export const useAppStore = create<AppStore>((set) => ({
   documents: [],
   emailThreads: [],
   googleConnected: false,
+  googleUser: null,
   streamingContent: '',
   isStreaming: false,
 
@@ -47,6 +56,7 @@ export const useAppStore = create<AppStore>((set) => ({
   setDocuments: (documents) => set({ documents }),
   setEmailThreads: (emailThreads) => set({ emailThreads }),
   setGoogleConnected: (googleConnected) => set({ googleConnected }),
+  setGoogleUser: (googleUser) => set({ googleUser }),
   setStreamingContent: (streamingContent) => set({ streamingContent }),
   setIsStreaming: (isStreaming) => set({ isStreaming }),
 }))

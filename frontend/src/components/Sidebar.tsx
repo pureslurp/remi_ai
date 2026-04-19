@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useAppStore } from '../store/appStore'
 import * as api from '../api/client'
 import type { Project } from '../types'
+import UserProfile from './UserProfile'
 
 interface PersonFields {
   firstName: string
@@ -186,8 +187,8 @@ export default function Sidebar() {
   }
 
   return (
-    <div className="flex flex-col h-full bg-gray-900 border-r border-gray-800">
-      <div className="p-4 border-b border-gray-800">
+    <div className="flex flex-col h-full min-h-0 bg-gray-900 border-r border-gray-800">
+      <div className="p-4 border-b border-gray-800 shrink-0">
         <div className="flex items-center justify-between mb-3">
           <h1 className="text-lg font-bold text-white">REMI AI</h1>
         </div>
@@ -199,7 +200,7 @@ export default function Sidebar() {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto py-2">
+      <div className="flex-1 min-h-0 overflow-y-auto py-2">
         {projects.length === 0 && (
           <p className="text-gray-500 text-xs text-center px-4 py-8">
             No clients yet. Create your first client above.
@@ -237,6 +238,8 @@ export default function Sidebar() {
       {showModal && (
         <NewClientModal onClose={() => setShowModal(false)} onCreated={handleCreated} />
       )}
+
+      <UserProfile />
     </div>
   )
 }

@@ -88,5 +88,13 @@ export const syncDrive = (projectId: string) =>
 
 // Auth
 export const getGoogleAuthUrl = () => req<{ url: string }>('/auth/google/url')
-export const getGoogleStatus = () => req<{ authenticated: boolean; reason?: string }>('/auth/google/status')
+export type GoogleStatus = {
+  authenticated: boolean
+  reason?: string
+  email?: string
+  name?: string
+  picture?: string
+}
+
+export const getGoogleStatus = () => req<GoogleStatus>('/auth/google/status')
 export const disconnectGoogle = () => req<void>('/auth/google/disconnect', { method: 'POST' })

@@ -1,3 +1,7 @@
+import json
+import urllib.error
+import urllib.request
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
 
@@ -12,6 +16,18 @@ from config import (
 from services import google_token_store
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+
+
+def _google_user_profile(access_token: str) -> dict:
+    req = urllib.request.Request(
+        "https://www.googleapis.com/oauth2/v2/userinfo",
+        headers={"Authorization": f"Bearer {access_token}"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            return json.loads(resp.read().decode())
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+        return {}
 
 
 def _web_client_config() -> dict:
@@ -87,7 +103,13 @@ def google_status():
             creds.refresh(Request())
             google_token_store.save_credentials_json(creds.to_json())
         if creds.valid:
-            return {"authenticated": True}
+            prof = _google_user_profile(creds.token)
+            return {
+                "authenticated": True,
+                "email": prof.get("email"),
+                "name": prof.get("name"),
+                "picture": prof.get("picture"),
+            }
         return {"authenticated": False, "reason": "token_expired"}
     except Exception:
         return {"authenticated": False, "reason": "token_invalid"}
