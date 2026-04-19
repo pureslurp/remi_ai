@@ -151,6 +151,8 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
     setClearConfirm(false)
   }
 
+  const gmailThreadsForProject = emailThreads.filter(t => t.project_id === project.id)
+
   return (
     <div className="overflow-y-auto h-full">
       <div className="p-4 space-y-5">
@@ -266,8 +268,49 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
             syncing={gmailSyncing}
             message={gmailMsg}
           />
-          {emailThreads.length > 0 && (
-            <p className="text-xs text-gray-500 mt-1">{emailThreads.length} threads synced</p>
+          <p className="text-[11px] text-gray-500 mt-2">
+            Message bodies stay in this Gmail section (and in chat context). Documents lists files only —
+            mostly Drive plus PDF or Word attachments from mail.
+          </p>
+          {gmailThreadsForProject.length > 0 && (
+            <div className="mt-3 space-y-2 border-t border-gray-700/60 pt-3">
+              <p className="text-xs font-medium text-gray-400">
+                Synced threads ({gmailThreadsForProject.length})
+              </p>
+              <ul className="space-y-2 max-h-56 overflow-y-auto pr-1">
+                {gmailThreadsForProject.map(thread => (
+                    <li
+                      key={thread.id}
+                      className="rounded-lg border border-gray-700/50 bg-gray-900/40 px-2 py-2 text-xs"
+                    >
+                      <p className="font-medium text-gray-200 truncate" title={thread.subject || ''}>
+                        {thread.subject || '(no subject)'}
+                      </p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        {(thread.messages?.length ?? 0)} message(s)
+                        {thread.last_message_date
+                          ? ` · last ${new Date(thread.last_message_date).toLocaleString()}`
+                          : ''}
+                      </p>
+                      {(thread.messages?.length ?? 0) > 0 && (
+                        <ul className="mt-2 space-y-1 border-t border-gray-800 pt-2 text-[11px] text-gray-400">
+                          {thread.messages!.slice(-5).map(m => (
+                            <li key={m.id} className="pl-1 border-l border-gray-600">
+                              <span className="text-gray-500">
+                                {m.date ? new Date(m.date).toLocaleDateString() : ''}
+                                {m.from_addr ? ` · ${m.from_addr.slice(0, 48)}` : ''}
+                              </span>
+                              {m.snippet && (
+                                <p className="text-gray-400 mt-0.5 line-clamp-2">{m.snippet}</p>
+                              )}
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </li>
+                  ))}
+              </ul>
+            </div>
           )}
         </Section>
 

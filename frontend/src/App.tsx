@@ -7,7 +7,6 @@ import ClientSettings from './components/ClientSettings'
 import LoginScreen from './components/LoginScreen'
 import { useProjectData } from './hooks/useProject'
 import type { Project } from './types'
-import { hasDeviceSession, setDeviceSession, clearDeviceSession } from './auth/session'
 
 async function loadSessionProjects(
   setProjects: (p: Project[]) => void,
@@ -25,37 +24,27 @@ async function loadSessionProjects(
 }
 
 export default function App() {
-  const {
-    projects,
-    activeProjectId,
-    setProjects,
-    setActiveProject,
-    setGoogleConnected,
-    setGoogleUser,
-    googleConnected,
-  } = useAppStore()
+  const { projects, activeProjectId, setProjects, setActiveProject, setGoogleConnected, setGoogleUser } =
+    useAppStore()
 
   const [authReady, setAuthReady] = useState(false)
   const [authError, setAuthError] = useState<string | null>(null)
-  /** True only when the API has a valid Google token AND this browser completed OAuth (sessionStorage). */
   const [sessionUnlocked, setSessionUnlocked] = useState(false)
 
   const bootstrap = useCallback(async () => {
     setAuthError(null)
     const params = new URLSearchParams(window.location.search)
     if (params.get('google_connected')) {
-      setDeviceSession()
       window.history.replaceState({}, '', '/')
     }
 
     try {
       const status = await api.getGoogleStatus()
-      if (!status.authenticated) {
-        clearDeviceSession()
-      }
+      const unlocked = status.authenticated === true
+      setGoogleConnected(unlocked)
+      setSessionUnlocked(unlocked)
 
-      setGoogleConnected(status.authenticated)
-      if (status.authenticated) {
+      if (unlocked && status.email !== undefined) {
         setGoogleUser({
           email: status.email,
           name: status.name,
@@ -65,11 +54,21 @@ export default function App() {
         setGoogleUser(null)
       }
 
-      const unlocked = status.authenticated && hasDeviceSession()
-      setSessionUnlocked(unlocked)
-
       if (unlocked) {
-        await loadSessionProjects(setProjects, setActiveProject)
+        try {
+          await loadSessionProjects(setProjects, setActiveProject)
+        } catch (e: unknown) {
+          const msg = e instanceof Error ? e.message : String(e)
+          if (msg.includes('401')) {
+            setGoogleConnected(false)
+            setSessionUnlocked(false)
+            setGoogleUser(null)
+            setProjects([])
+            setActiveProject(null)
+          } else {
+            throw e
+          }
+        }
       } else {
         setProjects([])
         setActiveProject(null)
@@ -129,8 +128,7 @@ export default function App() {
   }
 
   if (!sessionUnlocked) {
-    const needsDeviceLink = googleConnected && !hasDeviceSession()
-    return <LoginScreen needsDeviceLink={needsDeviceLink} />
+    return <LoginScreen />
   }
 
   return (

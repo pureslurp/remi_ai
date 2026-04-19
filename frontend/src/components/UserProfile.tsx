@@ -1,8 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../store/appStore'
 import * as api from '../api/client'
-import { clearDeviceSession } from '../auth/session'
-
 export default function UserProfile() {
   const { googleUser } = useAppStore()
   const [open, setOpen] = useState(false)
@@ -26,7 +24,6 @@ export default function UserProfile() {
     } catch {
       /* still clear local session */
     }
-    clearDeviceSession()
     window.location.assign('/')
   }
 

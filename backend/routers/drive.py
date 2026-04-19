@@ -1,28 +1,22 @@
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session
 from typing import List
 
+from fastapi import APIRouter, Depends
+from sqlalchemy.orm import Session
+
 from database import get_db
-from models import Project, Document
+from deps.project_access import ProjectForUser
+from models import Document
 from schemas.document import DocumentOut
 from services.drive_service import sync_drive
 
 router = APIRouter(prefix="/api/projects/{project_id}", tags=["drive"])
 
 
-def _get_project(project_id: str, db: Session):
-    project = db.get(Project, project_id)
-    if not project:
-        raise HTTPException(404, "Project not found")
-    return project
-
-
 @router.get("/drive/files", response_model=List[DocumentOut])
-def list_drive_files(project_id: str, db: Session = Depends(get_db)):
-    _get_project(project_id, db)
+def list_drive_files(project: ProjectForUser, db: Session = Depends(get_db)):
     docs = (
         db.query(Document)
-        .filter_by(project_id=project_id, source="drive")
+        .filter_by(project_id=project.id, source="drive")
         .order_by(Document.created_at.desc())
         .all()
     )
@@ -35,7 +29,6 @@ def list_drive_files(project_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/drive/sync")
-def trigger_drive_sync(project_id: str, db: Session = Depends(get_db)):
-    project = _get_project(project_id, db)
+def trigger_drive_sync(project: ProjectForUser, db: Session = Depends(get_db)):
     result = sync_drive(project, db)
     return result

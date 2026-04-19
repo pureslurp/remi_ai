@@ -1,3 +1,4 @@
+from .account import Account
 from .project import Project
 from .property import Property
 from .transaction import Transaction, KeyDate

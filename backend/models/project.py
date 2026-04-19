@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, DateTime, JSON
+from sqlalchemy import Column, String, Text, DateTime, JSON, ForeignKey
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from uuid import uuid4
@@ -9,6 +9,7 @@ class Project(Base):
     __tablename__ = "projects"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid4()))
+    owner_id = Column(String, ForeignKey("accounts.id"), nullable=False)
     name = Column(String, nullable=False)
     client_type = Column(String, nullable=False)  # "buyer" | "seller"
     email_addresses = Column(JSON, default=list)
@@ -23,6 +24,8 @@ class Project(Base):
     last_drive_sync = Column(DateTime)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    owner = relationship("Account", backref="projects")
 
     messages = relationship("ChatMessage", back_populates="project", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="project", cascade="all, delete-orphan")

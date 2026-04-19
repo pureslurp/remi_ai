@@ -104,3 +104,9 @@ if not is_postgres():
         _dir.mkdir(parents=True, exist_ok=True)
 else:
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
+
+# Multi-tenant session (Postgres + Google). SQLite uses implicit LOCAL_ACCOUNT_ID only.
+LOCAL_ACCOUNT_ID = "local"
+SESSION_COOKIE_NAME = os.environ.get("SESSION_COOKIE_NAME", "remi_session").strip() or "remi_session"
+SESSION_SECRET = os.environ.get("SESSION_SECRET", "").strip() or None
+SESSION_TTL_DAYS = int(os.environ.get("SESSION_TTL_DAYS", "14") or "14")

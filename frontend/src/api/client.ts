@@ -5,6 +5,7 @@ export const API_ROOT = rawBase ? `${rawBase}/api` : '/api'
 
 async function req<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(API_ROOT + path, {
+    credentials: 'include',
     headers: { 'Content-Type': 'application/json', ...opts?.headers },
     ...opts,
   })
@@ -67,9 +68,11 @@ export const listDocuments = (projectId: string) =>
 export const uploadDocument = (projectId: string, file: File) => {
   const form = new FormData()
   form.append('file', file)
-  return fetch(`${API_ROOT}/projects/${projectId}/documents`, { method: 'POST', body: form }).then(
-    (r) => r.json() as Promise<Document>,
-  )
+  return fetch(`${API_ROOT}/projects/${projectId}/documents`, {
+    method: 'POST',
+    body: form,
+    credentials: 'include',
+  }).then((r) => r.json() as Promise<Document>)
 }
 export const deleteDocument = (projectId: string, docId: string) =>
   req<void>(`/projects/${projectId}/documents/${docId}`, { method: 'DELETE' })
@@ -78,7 +81,10 @@ export const deleteDocument = (projectId: string, docId: string) =>
 export const listEmails = (projectId: string) =>
   req<EmailThread[]>(`/projects/${projectId}/emails`)
 export const syncGmail = (projectId: string) =>
-  req<{ synced: number; message: string }>(`/projects/${projectId}/gmail/sync`, { method: 'POST' })
+  req<{ synced: number; threads_checked?: number; message: string }>(
+    `/projects/${projectId}/gmail/sync`,
+    { method: 'POST' },
+  )
 
 // Drive
 export const listDriveFiles = (projectId: string) =>

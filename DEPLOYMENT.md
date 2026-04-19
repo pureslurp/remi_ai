@@ -71,7 +71,10 @@ Typical env vars:
 | `GOOGLE_REDIRECT_URI` | Yes in cloud | Must match GCP, e.g. `https://YOUR_API/api/auth/google/callback` |
 | `FRONTEND_ORIGIN` | Yes in cloud | Vercel site URL, e.g. `https://remi.vercel.app` (no trailing slash) |
 | `CORS_ORIGINS` | Yes in cloud | Comma-separated list of allowed browser origins (include `https://remi.vercel.app` and preview URLs if needed) |
+| `SESSION_SECRET` | Yes with Postgres + Google | Long random string used to sign the **`remi_session` HttpOnly cookie** after OAuth. Without it, users cannot stay signed in. The browser must send cookies on API calls (`credentials: 'include'` in the frontend — already enabled). |
 | `PORT` | Usually auto | Render/Railway inject this |
+
+**Multi-tenant:** Each Google user gets an `accounts` row (keyed by Google `sub`), their own `projects.owner_id`, and their own `google_oauth_credentials` row. API routes require a valid session cookie except `/api/health`, `/api/auth/google/url`, `/api/auth/google/callback`, and `/api/auth/google/status`.
 
 **Local-style Google** still works: place `credentials.json` under `~/.remi/` and omit `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`; tokens are stored in `google_token.json` on disk. With **Postgres**, tokens are stored in the `google_oauth_credentials` table instead.
 
@@ -208,6 +211,7 @@ Then leave `VITE_API_BASE` unset so requests stay same-origin.
 - [ ] Vercel: `VITE_API_BASE` or rewrites correct; production build opens the app  
 - [ ] Google: Web client redirect URI matches `GOOGLE_REDIRECT_URI`  
 - [ ] CORS: `CORS_ORIGINS` includes your Vercel origin  
+- [ ] `SESSION_SECRET` set (Postgres + Google); redeploy API after adding  
 - [ ] Smoke test from a second device: open app, Google connect, one chat, one upload  
 
 ---

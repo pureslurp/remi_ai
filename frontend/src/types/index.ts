@@ -83,6 +83,15 @@ export interface Document {
   chunk_count: number
 }
 
+export interface EmailMessage {
+  id: string
+  thread_id: string
+  from_addr?: string
+  to_addrs: string[]
+  date?: string
+  snippet?: string
+}
+
 export interface EmailThread {
   id: string
   project_id: string
@@ -90,4 +99,5 @@ export interface EmailThread {
   participants: string[]
   last_message_date?: string
   fetched_at: string
+  messages?: EmailMessage[]
 }

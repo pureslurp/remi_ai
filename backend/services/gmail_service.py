@@ -1,4 +1,5 @@
 import base64
+import html as html_module
 import re
 from datetime import datetime
 from email.utils import parsedate_to_datetime
@@ -30,19 +31,40 @@ def _get_creds():
     return creds
 
 
+def _strip_html_to_text(raw: str) -> str:
+    if not raw:
+        return ""
+    text = re.sub(r"(?is)<(script|style)[^>]*>.*?</\1>", " ", raw)
+    text = re.sub(r"(?s)<[^>]+>", " ", text)
+    text = html_module.unescape(text)
+    return re.sub(r"\s+", " ", text).strip()
+
+
 def _decode_body(payload: dict) -> str:
-    """Recursively extract text/plain body from a Gmail message payload."""
+    """Recursively extract text/plain (preferred) or text/html from a Gmail message payload."""
     mime = payload.get("mimeType", "")
     if mime == "text/plain":
         data = payload.get("body", {}).get("data", "")
         return base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="replace") if data else ""
 
+    if mime == "text/html":
+        data = payload.get("body", {}).get("data", "")
+        raw = base64.urlsafe_b64decode(data + "==").decode("utf-8", errors="replace") if data else ""
+        return _strip_html_to_text(raw)
+
     if mime.startswith("multipart/"):
         parts = payload.get("parts", [])
+        plain = ""
         for part in parts:
+            pm = part.get("mimeType", "")
             text = _decode_body(part)
-            if text:
+            if not text:
+                continue
+            if pm == "text/plain":
                 return text
+            if pm == "text/html" and not plain:
+                plain = text
+        return plain
     return ""
 
 
@@ -127,9 +149,10 @@ def _message_matches_address_rules(
     msg_date: datetime | None,
     from_addr: str,
     to_addrs: list[str],
+    cc_addrs: list[str],
 ) -> bool:
     """True if the message passes at least one matched client address's filters."""
-    blob = " ".join([from_addr] + to_addrs).lower()
+    blob = " ".join([from_addr] + to_addrs + cc_addrs).lower()
     matched = [ea for ea in project.email_addresses if ea.lower() in blob]
     if not matched:
         return False
@@ -158,7 +181,11 @@ def sync_gmail(project: Project, db: Session) -> dict:
     from googleapiclient.discovery import build as google_build
 
     if not project.email_addresses:
-        return {"synced": 0, "message": "No email addresses configured for this client."}
+        return {
+            "synced": 0,
+            "threads_checked": 0,
+            "message": "No email addresses configured for this client.",
+        }
 
     creds = _get_creds()
     gmail = google_build("gmail", "v1", credentials=creds)
@@ -189,7 +216,8 @@ def sync_gmail(project: Project, db: Session) -> dict:
         for t in threads:
             new_message_ids.append(t["id"])  # reuse id as thread_id for lookup
 
-    synced_count = 0
+    messages_imported = 0
+    threads_checked = len(new_message_ids)
     latest_history_id = project.gmail_history_id
 
     for msg_or_thread_id in new_message_ids:
@@ -208,11 +236,7 @@ def sync_gmail(project: Project, db: Session) -> dict:
                 ).execute()
                 messages_data = thread_data.get("messages", [])
 
-            # Fetch or update thread record
             thread_obj = db.get(EmailThread, thread_id)
-            if not thread_obj:
-                thread_obj = EmailThread(id=thread_id, project_id=project.id)
-                db.add(thread_obj)
 
             msgs_to_process = [msg_data] if project.gmail_history_id else messages_data
 
@@ -227,25 +251,30 @@ def sync_gmail(project: Project, db: Session) -> dict:
                 headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
                 subject = headers.get("Subject", "")
                 from_addr = headers.get("From", "")
-                to_addrs = [a.strip() for a in headers.get("To", "").split(",")]
+                to_addrs = [a.strip() for a in headers.get("To", "").split(",") if a.strip()]
+                cc_addrs = [a.strip() for a in headers.get("Cc", "").split(",") if a.strip()]
                 date = _parse_date(headers.get("Date", ""))
                 body = _decode_body(msg.get("payload", {}))
                 snippet = msg.get("snippet", "")
 
-                # Filter: only keep if involves client's email addresses
-                all_addrs = [from_addr] + to_addrs
-                if not any(
-                    ea.lower() in " ".join(all_addrs).lower()
-                    for ea in project.email_addresses
-                ):
+                # Filter: only keep if involves client's email addresses (From / To / Cc)
+                all_addrs = [from_addr] + to_addrs + cc_addrs
+                addr_blob = " ".join(all_addrs).lower()
+                if not any(ea.lower() in addr_blob for ea in project.email_addresses):
                     continue
 
                 # Filter: per-address subject keywords and optional after-date
-                if not _message_matches_address_rules(project, subject, date, from_addr, to_addrs):
+                if not _message_matches_address_rules(
+                    project, subject, date, from_addr, to_addrs, cc_addrs
+                ):
                     continue
 
+                if thread_obj is None:
+                    thread_obj = EmailThread(id=thread_id, project_id=project.id)
+                    db.add(thread_obj)
+
                 thread_obj.subject = subject
-                participants.update([from_addr] + to_addrs)
+                participants.update([from_addr] + to_addrs + cc_addrs)
                 if date and (latest_date is None or date > latest_date):
                     latest_date = date
 
@@ -258,6 +287,7 @@ def sync_gmail(project: Project, db: Session) -> dict:
                     body_text=body[:8000],  # cap per-message storage
                     snippet=snippet,
                 ))
+                messages_imported += 1
 
                 # Extract attachments
                 _extract_attachments(msg.get("payload", {}), msg_id, project.id, gmail, db)
@@ -265,13 +295,13 @@ def sync_gmail(project: Project, db: Session) -> dict:
                 if msg.get("historyId"):
                     latest_history_id = msg["historyId"]
 
-            thread_obj.participants = list(participants)
-            if latest_date:
-                thread_obj.last_message_date = latest_date
-            thread_obj.fetched_at = datetime.utcnow()
-            synced_count += 1
+            if thread_obj is not None and (participants or latest_date):
+                thread_obj.participants = list(participants)
+                if latest_date:
+                    thread_obj.last_message_date = latest_date
+                thread_obj.fetched_at = datetime.utcnow()
 
-        except Exception as e:
+        except Exception:
             continue  # skip failed messages, don't break entire sync
 
     # Update history cursor
@@ -280,7 +310,21 @@ def sync_gmail(project: Project, db: Session) -> dict:
     project.last_gmail_sync = datetime.utcnow()
     db.commit()
 
-    return {"synced": synced_count, "message": f"Synced {synced_count} threads/messages."}
+    if messages_imported:
+        msg = (
+            f"Imported {messages_imported} new message(s). "
+            f"({threads_checked} Gmail thread(s) checked.)"
+        )
+    elif threads_checked:
+        msg = (
+            f"No new messages matched your filters (checked {threads_checked} thread(s)). "
+            "Tip: subject keywords or “on or after” dates can hide mail; "
+            "only PDF/DOCX attachments appear under Documents."
+        )
+    else:
+        msg = "No Gmail threads matched the client addresses."
+
+    return {"synced": messages_imported, "threads_checked": threads_checked, "message": msg}
 
 
 def create_gmail_draft(to: str, subject: str, body: str) -> str:
