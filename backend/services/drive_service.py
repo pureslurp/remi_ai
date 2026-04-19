@@ -43,6 +43,8 @@ def _list_all_files(drive, folder_id: str) -> list[dict]:
             q=f"'{folder_id}' in parents and trashed=false",
             fields="nextPageToken, files(id, name, mimeType, size, modifiedTime, md5Checksum)",
             pageSize=100,
+            supportsAllDrives=True,
+            includeItemsFromAllDrives=True,
         )
         if page_token:
             kwargs["pageToken"] = page_token
@@ -86,12 +88,14 @@ def _effective_mime(filename: str, declared: str) -> str:
 def _download_file(drive, file: dict) -> tuple[bytes, str]:
     """Download a Drive file and return (content_bytes, mime_type)."""
     mime = file["mimeType"]
+    fid = file["id"]
 
     if mime == "application/vnd.google-apps.document":
-        content = drive.files().export(fileId=file["id"], mimeType="text/plain").execute()
+        # files.export has no supportsAllDrives param; fileId is enough for shared-drive Docs.
+        content = drive.files().export(fileId=fid, mimeType="text/plain").execute()
         return content, "text/plain"
 
-    content = drive.files().get_media(fileId=file["id"]).execute()
+    content = drive.files().get_media(fileId=fid, supportsAllDrives=True).execute()
     return content, mime
 
 
@@ -119,7 +123,7 @@ def sync_drive(project: Project, db: Session) -> dict:
             skipped_count += 1
             continue
 
-        # Check if already indexed by drive_file_id and not modified since
+        # Skip if this Drive file id is already linked
         existing = db.query(Document).filter_by(
             project_id=project.id, drive_file_id=f["id"]
         ).first()

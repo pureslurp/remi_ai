@@ -110,7 +110,18 @@ def process_bytes(project_id: str, filename: str, content: bytes,
     file_hash = _sha256(content)
     existing = db.query(Document).filter_by(project_id=project_id, file_hash=file_hash).first()
     if existing:
-        return None  # duplicate
+        # Same bytes already ingested (e.g. uploaded or via Gmail). Link this Drive file id when
+        # missing so Drive sync does not report a false "skip"; do not steal the link from a
+        # different Drive file that happens to share the same hash.
+        if drive_file_id:
+            if existing.drive_file_id in (None, drive_file_id):
+                if existing.drive_file_id != drive_file_id:
+                    existing.drive_file_id = drive_file_id
+                    db.commit()
+                    db.refresh(existing)
+                return existing
+            return None
+        return None  # duplicate (non-Drive ingest)
 
     doc_id = str(uuid4())
     storage_key = object_storage.save_file(
