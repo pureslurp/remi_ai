@@ -9,6 +9,9 @@ _engine_kwargs = {"pool_pre_ping": True}
 if SQLALCHEMY_DATABASE_URI.startswith("sqlite"):
     _connect_args = {"check_same_thread": False}
     _engine_kwargs = {}
+elif SQLALCHEMY_DATABASE_URI.split(":", 1)[0].startswith("postgres"):
+    # Avoid hanging forever on bad host/firewall (Railway → 502 "application not responding")
+    _connect_args = {"connect_timeout": 15}
 
 engine = create_engine(
     SQLALCHEMY_DATABASE_URI,

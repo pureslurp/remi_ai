@@ -173,6 +173,7 @@ Use that same HTTPS origin (the hostname from step **D.3**) as **`VITE_API_BASE`
 2. **Authorized JavaScript origins**: your Vercel URL(s), e.g. `https://remi.vercel.app`.
 3. **Authorized redirect URIs**: exactly `https://<YOUR_API_HOST>/api/auth/google/callback` (same value as `GOOGLE_REDIRECT_URI`).
 4. Put **Client ID** and **Client secret** in the API environment as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
+5. **`FRONTEND_ORIGIN` on Railway** (required for a good UX): after Google approves the user, the API sends the browser to `{FRONTEND_ORIGIN}/?google_connected=1`. If `FRONTEND_ORIGIN` is missing, the app uses the dev default **`http://localhost:5173`**, so production users look like “OAuth broke” when they actually land on localhost. Set it to your **Vercel** site origin (no path, no trailing slash), same host you put in `CORS_ORIGINS`.
 
 ---
 

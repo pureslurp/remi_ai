@@ -1,6 +1,7 @@
 import logging
 import os
 from pathlib import Path
+from urllib.parse import urlparse
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -9,7 +10,7 @@ from dotenv import load_dotenv
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
-from config import CORS_ORIGINS, LOGS_DIR, is_postgres
+from config import CORS_ORIGINS, GOOGLE_CLIENT_ID, LOGS_DIR, is_postgres
 from sqlalchemy import text
 
 # Configure logging to file + console (file optional if not writable)
@@ -31,6 +32,22 @@ from database import engine, Base
 import models  # ensure all ORM models are registered
 
 if is_postgres():
+    _dbu = urlparse(os.environ.get("DATABASE_URL", ""))
+    logger.info(
+        "Postgres target host=%s port=%s user=%s database=%s",
+        _dbu.hostname,
+        _dbu.port,
+        _dbu.username,
+        (_dbu.path or "/").lstrip("/") or "postgres",
+    )
+    if _dbu.hostname and "pooler.supabase.com" in _dbu.hostname:
+        if _dbu.username == "postgres":
+            logger.warning(
+                "DATABASE_URL user is 'postgres' but host is the Supavisor pooler. "
+                "Session pooler strings almost always need user postgres.<YOUR_PROJECT_REF> "
+                "(copy the full URI from Supabase → Connect → Session pooler). "
+                "Wrong user causes auth failure and 502 on boot."
+            )
     from alembic.config import Config
     from alembic import command
 
@@ -60,6 +77,13 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+logger.info("CORS allow_origins=%s", CORS_ORIGINS)
+if is_postgres() and GOOGLE_CLIENT_ID and not os.environ.get("FRONTEND_ORIGIN", "").strip():
+    logger.warning(
+        "FRONTEND_ORIGIN is unset. After Google OAuth, redirects go to the default "
+        "http://localhost:5173/?google_connected=1. Set FRONTEND_ORIGIN on Railway to your "
+        "Vercel origin (same URL as in CORS), e.g. https://your-app.vercel.app"
+    )
 
 app.include_router(projects.router)
 app.include_router(properties.router)
