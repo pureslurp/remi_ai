@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useAppStore } from '../store/appStore'
 import * as api from '../api/client'
 import type { Project } from '../types'
+import { getClientPanelCopy } from '../lib/clientPanelCopy'
 import TransactionPanel from './TransactionPanel'
 import DocumentList from './DocumentList'
 import SyncStatus from './SyncStatus'
@@ -152,9 +153,10 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
   }
 
   const gmailThreadsForProject = emailThreads.filter(t => t.project_id === project.id)
+  const panelCopy = getClientPanelCopy(project.client_type)
 
   return (
-    <div className="overflow-y-auto h-full">
+    <div className={`overflow-y-auto h-full ${panelCopy.panelAccentClass}`}>
       <div className="p-4 space-y-5">
 
         {/* Profile */}
@@ -186,16 +188,17 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
               value={notes}
               onChange={e => setNotes(e.target.value)}
               onBlur={() => notes !== (project.notes || '') && save({ notes })}
-              placeholder="Agent notes (pre-approval, preferences, budget…)"
+              placeholder={panelCopy.agentNotesPlaceholder}
               rows={3}
             />
           </div>
         </Section>
 
         {/* Transaction */}
-        <Section title="Transactions">
+        <Section title={panelCopy.transactionsSectionTitle}>
           <TransactionPanel
             projectId={project.id}
+            clientType={project.client_type}
             properties={properties}
             transactions={transactions}
           />

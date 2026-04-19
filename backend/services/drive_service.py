@@ -1,4 +1,6 @@
+import logging
 import re
+from collections import Counter
 from pathlib import Path
 from datetime import datetime
 from sqlalchemy.orm import Session
@@ -7,6 +9,8 @@ from models import Project, Document
 from config import GOOGLE_SCOPES
 from services.document_service import process_bytes
 from services import google_token_store
+
+logger = logging.getLogger("remi.drive")
 
 
 def _get_creds():
@@ -35,13 +39,13 @@ def extract_folder_id(url_or_id: str) -> str:
 
 
 def _list_all_files(drive, folder_id: str) -> list[dict]:
-    """Recursively list all non-trashed files in a Drive folder."""
-    files = []
+    """Recursively list all non-trashed files in a Drive folder (incl. shared drives)."""
+    files: list[dict] = []
     page_token = None
     while True:
         kwargs = dict(
             q=f"'{folder_id}' in parents and trashed=false",
-            fields="nextPageToken, files(id, name, mimeType, size, modifiedTime, md5Checksum)",
+            fields="nextPageToken, files(id, name, mimeType, size, modifiedTime, md5Checksum, shortcutDetails)",
             pageSize=100,
             supportsAllDrives=True,
             includeItemsFromAllDrives=True,
@@ -50,34 +54,77 @@ def _list_all_files(drive, folder_id: str) -> list[dict]:
             kwargs["pageToken"] = page_token
         resp = drive.files().list(**kwargs).execute()
         for f in resp.get("files", []):
-            if f["mimeType"] == "application/vnd.google-apps.folder":
+            mt = f.get("mimeType")
+            if mt == "application/vnd.google-apps.folder":
                 files.extend(_list_all_files(drive, f["id"]))
-            else:
-                files.append(f)
+                continue
+            if mt == "application/vnd.google-apps.shortcut":
+                target = (f.get("shortcutDetails") or {}).get("targetMimeType")
+                target_id = (f.get("shortcutDetails") or {}).get("targetId")
+                if target_id and target == "application/vnd.google-apps.folder":
+                    files.extend(_list_all_files(drive, target_id))
+                elif target_id:
+                    try:
+                        meta = (
+                            drive.files()
+                            .get(
+                                fileId=target_id,
+                                fields="id, name, mimeType, size, modifiedTime, md5Checksum",
+                                supportsAllDrives=True,
+                            )
+                            .execute()
+                        )
+                        files.append(meta)
+                    except Exception:
+                        logger.exception("Drive: failed to resolve shortcut target %s", target_id)
+                continue
+            files.append(f)
         page_token = resp.get("nextPageToken")
         if not page_token:
             break
     return files
 
 
-SUPPORTED_MIME = {
+# Native (non-Workspace) types we ingest as-is.
+DIRECT_SUPPORTED_MIME = {
     "application/pdf",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",  # .docx
     "text/plain",
-    "application/vnd.google-apps.document",
+    "text/csv",
+    "text/html",
+    "application/rtf",
+    "text/rtf",
 }
 
-# Drive often reports Office uploads as application/octet-stream, application/zip (docx is a zip),
-# or other generic types. Use the filename when the declared MIME is not one we handle.
+# Google Workspace types we know how to export to text we can index.
+# Map: source mime -> (export mime, output mime stored on the Document)
+_WORKSPACE_EXPORT = {
+    "application/vnd.google-apps.document": ("text/plain", "text/plain"),
+    "application/vnd.google-apps.spreadsheet": ("text/csv", "text/csv"),
+    "application/vnd.google-apps.presentation": ("text/plain", "text/plain"),
+}
+
+# Drive often labels uploaded Office files as octet-stream / zip; rescue by extension.
 _EXT_TO_MIME = {
     ".pdf": "application/pdf",
     ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
     ".txt": "text/plain",
+    ".csv": "text/csv",
+    ".html": "text/html",
+    ".htm": "text/html",
+    ".rtf": "application/rtf",
 }
+
+# Reasons surfaced to the UI when files are skipped.
+REASON_UNSUPPORTED = "unsupported_type"
+REASON_ALREADY_LINKED = "already_linked"
+REASON_DUPLICATE_HASH = "duplicate_content"
+REASON_DOWNLOAD_FAILED = "download_failed"
+REASON_NO_TEXT = "extraction_empty"  # not used today, reserved
 
 
 def _effective_mime(filename: str, declared: str) -> str:
-    if declared in SUPPORTED_MIME:
+    if declared in DIRECT_SUPPORTED_MIME or declared in _WORKSPACE_EXPORT:
         return declared
     ext = Path(filename or "").suffix.lower()
     if ext in _EXT_TO_MIME:
@@ -86,14 +133,15 @@ def _effective_mime(filename: str, declared: str) -> str:
 
 
 def _download_file(drive, file: dict) -> tuple[bytes, str]:
-    """Download a Drive file and return (content_bytes, mime_type)."""
+    """Download a Drive file and return (content_bytes, stored_mime_type)."""
     mime = file["mimeType"]
     fid = file["id"]
 
-    if mime == "application/vnd.google-apps.document":
-        # files.export has no supportsAllDrives param; fileId is enough for shared-drive Docs.
-        content = drive.files().export(fileId=fid, mimeType="text/plain").execute()
-        return content, "text/plain"
+    if mime in _WORKSPACE_EXPORT:
+        export_mime, stored_mime = _WORKSPACE_EXPORT[mime]
+        # files.export does not accept supportsAllDrives.
+        content = drive.files().export(fileId=fid, mimeType=export_mime).execute()
+        return content, stored_mime
 
     content = drive.files().get_media(fileId=fid, supportsAllDrives=True).execute()
     return content, mime
@@ -103,7 +151,12 @@ def sync_drive(project: Project, db: Session) -> dict:
     from googleapiclient.discovery import build as google_build
 
     if not project.drive_folder_id:
-        return {"synced": 0, "message": "No Drive folder configured. Paste a folder URL in settings."}
+        return {
+            "synced": 0,
+            "skipped": 0,
+            "skip_reasons": {},
+            "message": "No Drive folder configured. Paste a folder URL in settings.",
+        }
 
     creds = _get_creds()
     drive = google_build("drive", "v3", credentials=creds)
@@ -112,49 +165,82 @@ def sync_drive(project: Project, db: Session) -> dict:
     all_files = _list_all_files(drive, folder_id)
 
     synced_count = 0
-    skipped_count = 0
+    skip_reasons: Counter[str] = Counter()
+    sample_unsupported: list[str] = []
 
     for f in all_files:
-        name = f.get("name") or ""
-        effective = _effective_mime(name, f.get("mimeType") or "")
+        name = f.get("name") or "(unnamed)"
+        declared_mime = f.get("mimeType") or ""
+        effective = _effective_mime(name, declared_mime)
         f_use = {**f, "mimeType": effective}
 
-        if f_use["mimeType"] not in SUPPORTED_MIME:
-            skipped_count += 1
+        if effective not in DIRECT_SUPPORTED_MIME and effective not in _WORKSPACE_EXPORT:
+            skip_reasons[REASON_UNSUPPORTED] += 1
+            if len(sample_unsupported) < 5:
+                sample_unsupported.append(f"{name} ({declared_mime or 'unknown'})")
+            logger.info("Drive skip [unsupported]: %s mime=%s", name, declared_mime)
             continue
 
-        # Skip if this Drive file id is already linked
         existing = db.query(Document).filter_by(
             project_id=project.id, drive_file_id=f["id"]
         ).first()
         if existing:
-            skipped_count += 1
+            skip_reasons[REASON_ALREADY_LINKED] += 1
+            logger.info("Drive skip [already linked]: %s", name)
             continue
 
         try:
-            content, mime = _download_file(drive, f_use)
+            content, stored_mime = _download_file(drive, f_use)
+        except Exception as exc:
+            skip_reasons[REASON_DOWNLOAD_FAILED] += 1
+            logger.exception("Drive skip [download_failed]: %s mime=%s err=%s", name, effective, exc)
+            continue
+
+        try:
             result = process_bytes(
                 project_id=project.id,
-                filename=f["name"],
+                filename=name,
                 content=content,
-                mime_type=mime,
+                mime_type=stored_mime,
                 source="drive",
                 db=db,
                 drive_file_id=f["id"],
             )
-            if result:
-                synced_count += 1
-            else:
-                skipped_count += 1
-        except Exception:
-            skipped_count += 1
+        except Exception as exc:
+            skip_reasons[REASON_DOWNLOAD_FAILED] += 1
+            logger.exception("Drive skip [process_failed]: %s err=%s", name, exc)
             continue
+
+        if result:
+            synced_count += 1
+            logger.info("Drive sync ok: %s -> doc=%s", name, result.id)
+        else:
+            skip_reasons[REASON_DUPLICATE_HASH] += 1
+            logger.info("Drive skip [duplicate hash]: %s", name)
 
     project.last_drive_sync = datetime.utcnow()
     db.commit()
 
+    skipped_total = sum(skip_reasons.values())
+    parts: list[str] = []
+    if skip_reasons.get(REASON_UNSUPPORTED):
+        sample = f" e.g. {', '.join(sample_unsupported)}" if sample_unsupported else ""
+        parts.append(f"{skip_reasons[REASON_UNSUPPORTED]} unsupported type{sample}")
+    if skip_reasons.get(REASON_ALREADY_LINKED):
+        parts.append(f"{skip_reasons[REASON_ALREADY_LINKED]} already linked")
+    if skip_reasons.get(REASON_DUPLICATE_HASH):
+        parts.append(f"{skip_reasons[REASON_DUPLICATE_HASH]} duplicate content")
+    if skip_reasons.get(REASON_DOWNLOAD_FAILED):
+        parts.append(f"{skip_reasons[REASON_DOWNLOAD_FAILED]} download/processing failed (see server log)")
+
+    detail = "; ".join(parts)
+    msg = f"Synced {synced_count} new file(s), skipped {skipped_total}."
+    if detail:
+        msg = f"{msg} ({detail})"
+
     return {
         "synced": synced_count,
-        "skipped": skipped_count,
-        "message": f"Synced {synced_count} new files, skipped {skipped_count}.",
+        "skipped": skipped_total,
+        "skip_reasons": dict(skip_reasons),
+        "message": msg,
     }

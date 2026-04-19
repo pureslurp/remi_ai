@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useAppStore } from '../store/appStore'
 import * as api from '../api/client'
-import type { Transaction, KeyDate, Property } from '../types'
+import type { Transaction, KeyDate, Property, Project } from '../types'
+import { getClientPanelCopy } from '../lib/clientPanelCopy'
 
 function fmtMoney(v?: number) {
   if (!v) return 'N/A'
@@ -106,11 +107,15 @@ function TransactionCard({
   prop,
   projectId,
   collapsed = false,
+  propertyContextLabel,
+  transactionNotesPlaceholder,
 }: {
   tx: Transaction
   prop?: Property
   projectId: string
   collapsed?: boolean
+  propertyContextLabel: string
+  transactionNotesPlaceholder: string
 }) {
   const { setTransactions, transactions } = useAppStore()
   const [expanded, setExpanded] = useState(!collapsed)
@@ -147,6 +152,7 @@ function TransactionCard({
         onClick={() => setExpanded(e => !e)}
       >
         <div className="flex-1 min-w-0">
+          <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-0.5">{propertyContextLabel}</p>
           <p className="text-sm font-medium text-white truncate">
             {prop?.address ?? 'No property linked'}
           </p>
@@ -215,7 +221,7 @@ function TransactionCard({
             <textarea
               className="w-full bg-gray-700 rounded-lg px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 resize-none text-gray-100"
               rows={3}
-              placeholder="Offer history, counter notes, inspection findings, any deal-specific details…"
+              placeholder={transactionNotesPlaceholder}
               value={notes}
               onChange={e => setNotes(e.target.value)}
               onBlur={saveNotes}
@@ -254,11 +260,28 @@ function TransactionCard({
 
 interface Props {
   projectId: string
+  clientType: Project['client_type']
   properties: Property[]
   transactions: Transaction[]
 }
 
-export default function TransactionPanel({ projectId, properties, transactions }: Props) {
+function duplicateListingOfferHint(
+  clientType: Project['client_type'],
+  activeTxs: Transaction[],
+  copy: ReturnType<typeof getClientPanelCopy>,
+): string | null {
+  const ids = activeTxs.map(t => t.property_id).filter((id): id is string => Boolean(id))
+  const counts = ids.reduce<Record<string, number>>((acc, id) => {
+    acc[id] = (acc[id] ?? 0) + 1
+    return acc
+  }, {})
+  const hasMultipleOffersSameProperty = Object.values(counts).some(n => n > 1)
+  if (!hasMultipleOffersSameProperty || !copy.multiOfferSameListingHint) return null
+  if (clientType === 'seller' || clientType === 'buyer & seller') return copy.multiOfferSameListingHint
+  return null
+}
+
+export default function TransactionPanel({ projectId, clientType, properties, transactions }: Props) {
   const { setTransactions, setProperties } = useAppStore()
   const [addingTx, setAddingTx] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
@@ -266,8 +289,11 @@ export default function TransactionPanel({ projectId, properties, transactions }
   const [newClose, setNewClose] = useState('')
   const [newPropAddr, setNewPropAddr] = useState('')
 
-  const activeTxs = transactions.filter(t => !['closed', 'dead'].includes(t.status))
-  const pastTxs = transactions.filter(t => ['closed', 'dead'].includes(t.status))
+  const copy = getClientPanelCopy(clientType)
+  const txsForProject = transactions.filter(t => t.project_id === projectId)
+  const activeTxs = txsForProject.filter(t => !['closed', 'dead'].includes(t.status))
+  const pastTxs = txsForProject.filter(t => ['closed', 'dead'].includes(t.status))
+  const listingHint = duplicateListingOfferHint(clientType, activeTxs, copy)
 
   const createTx = async () => {
     let propertyId: string | undefined
@@ -282,7 +308,7 @@ export default function TransactionPanel({ projectId, properties, transactions }
       close_date: newClose ? new Date(newClose).toISOString() : undefined,
       status: 'active',
     })
-    setTransactions([...transactions, tx])
+    setTransactions([...txsForProject, tx])
     setAddingTx(false)
     setNewOffer('')
     setNewClose('')
@@ -291,8 +317,11 @@ export default function TransactionPanel({ projectId, properties, transactions }
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Transactions</h3>
+      <p className="text-xs text-gray-500 mb-2">{copy.transactionsSubtitle}</p>
+      {listingHint && (
+        <p className="text-xs text-amber-500/90 mb-2">{listingHint}</p>
+      )}
+      <div className="flex justify-end mb-2">
         <button
           onClick={() => setAddingTx(!addingTx)}
           className="text-xs text-blue-400 hover:text-blue-300 transition"
@@ -305,13 +334,13 @@ export default function TransactionPanel({ projectId, properties, transactions }
         <div className="bg-gray-800 rounded-xl p-3 mb-3 space-y-2">
           <input
             className="w-full bg-gray-700 rounded px-2 py-1.5 text-xs outline-none"
-            placeholder="Property address"
+            placeholder={copy.newPropertyAddressPlaceholder}
             value={newPropAddr}
             onChange={e => setNewPropAddr(e.target.value)}
           />
           <input
             className="w-full bg-gray-700 rounded px-2 py-1.5 text-xs outline-none"
-            placeholder="Offer price (e.g. 415000)"
+            placeholder={copy.newOfferPricePlaceholder}
             value={newOffer}
             onChange={e => setNewOffer(e.target.value)}
           />
@@ -332,7 +361,7 @@ export default function TransactionPanel({ projectId, properties, transactions }
       )}
 
       {activeTxs.length === 0 && !addingTx && (
-        <p className="text-xs text-gray-500 mb-2">No active transactions.</p>
+        <p className="text-xs text-gray-500 mb-2">{copy.emptyActiveTransactions}</p>
       )}
 
       {activeTxs.map(tx => (
@@ -341,6 +370,8 @@ export default function TransactionPanel({ projectId, properties, transactions }
           tx={tx}
           prop={properties.find(p => p.id === tx.property_id)}
           projectId={projectId}
+          propertyContextLabel={copy.propertyContextLabel}
+          transactionNotesPlaceholder={copy.transactionNotesPlaceholder}
         />
       ))}
 
@@ -361,6 +392,8 @@ export default function TransactionPanel({ projectId, properties, transactions }
               prop={properties.find(p => p.id === tx.property_id)}
               projectId={projectId}
               collapsed={true}
+              propertyContextLabel={copy.propertyContextLabel}
+              transactionNotesPlaceholder={copy.transactionNotesPlaceholder}
             />
           ))}
         </div>

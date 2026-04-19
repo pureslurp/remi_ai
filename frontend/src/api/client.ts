@@ -110,7 +110,10 @@ export const syncGmail = (projectId: string) =>
 export const listDriveFiles = (projectId: string) =>
   req<Document[]>(`/projects/${projectId}/drive/files`)
 export const syncDrive = (projectId: string) =>
-  req<{ synced: number; message: string }>(`/projects/${projectId}/drive/sync`, { method: 'POST' })
+  req<{ synced: number; skipped?: number; skip_reasons?: Record<string, number>; message: string }>(
+    `/projects/${projectId}/drive/sync`,
+    { method: 'POST' },
+  )
 
 // Auth
 export const getGoogleAuthUrl = () => req<{ url: string }>('/auth/google/url')
