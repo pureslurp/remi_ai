@@ -95,8 +95,15 @@ for _part in _cors_raw.split(","):
 _env_frontend = os.environ.get("FRONTEND_ORIGIN", "").strip()
 if _env_frontend:
     _fe = _normalize_browser_origin(_env_frontend)
-    if _fe and _fe not in CORS_ORIGINS:
-        CORS_ORIGINS = [*CORS_ORIGINS, _fe]
+    if _fe and _fe not in _seen_cors:
+        _seen_cors.add(_fe)
+        CORS_ORIGINS.append(_fe)
+
+# Always allow resolved FRONTEND_ORIGIN (default http://localhost:5173) so split
+# Vite + API works and empty CORS_ORIGINS cannot lock everyone out.
+if FRONTEND_ORIGIN and FRONTEND_ORIGIN not in _seen_cors:
+    _seen_cors.add(FRONTEND_ORIGIN)
+    CORS_ORIGINS.append(FRONTEND_ORIGIN)
 
 # Optional extra allowed Origin values (Starlette regex). Use for many Vercel preview URLs
 # without listing each one, e.g. r"https://remi-ai[-\w]*\.vercel\.app"

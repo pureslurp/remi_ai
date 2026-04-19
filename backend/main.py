@@ -7,9 +7,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from dotenv import load_dotenv
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.requests import Request
-from starlette.responses import Response
+from starlette.datastructures import MutableHeaders
+from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 load_dotenv(Path(__file__).parent.parent / ".env")
 
@@ -102,27 +101,42 @@ else:
 from routers import projects, properties, transactions, documents, chat, auth, gmail, drive
 
 
-class ApiNoCacheMiddleware(BaseHTTPMiddleware):
+class ApiNoCacheMiddleware:
     """
     Railway's edge (Fastly) may cache GET /api/* responses. Probes without an Origin
     header get 401/200 without Access-Control-Allow-Origin; serving that cached object
     to a browser that sends Origin triggers a false CORS failure. Strong no-store +
     Vary: Origin reduces bad cache hits; Surrogate-Control helps Fastly skip cache.
+
+    Implemented as pure ASGI (not BaseHTTPMiddleware) to avoid Starlette edge-case 500s.
     """
 
-    async def dispatch(self, request: Request, call_next) -> Response:
-        response = await call_next(request)
-        if request.url.path.startswith("/api/"):
-            response.headers["Cache-Control"] = "private, no-store, must-revalidate"
-            response.headers["Pragma"] = "no-cache"
-            response.headers["Expires"] = "0"
-            response.headers["Surrogate-Control"] = "no-store"
-            existing = (response.headers.get("vary") or "").strip()
-            parts = [p.strip() for p in existing.split(",") if p.strip()] if existing else []
-            if "Origin" not in parts:
-                parts.append("Origin")
-            response.headers["vary"] = ", ".join(parts)
-        return response
+    def __init__(self, app: ASGIApp):
+        self.app = app
+
+    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+        if scope["type"] != "http":
+            await self.app(scope, receive, send)
+            return
+
+        path = scope.get("path") or ""
+
+        async def send_wrapper(message: Message) -> None:
+            if message["type"] == "http.response.start" and path.startswith("/api/"):
+                headers = MutableHeaders(scope=message)
+                headers["Cache-Control"] = "private, no-store, must-revalidate"
+                headers["Pragma"] = "no-cache"
+                headers["Expires"] = "0"
+                headers["Surrogate-Control"] = "no-store"
+                vary = headers.get("vary", "")
+                parts = [p.strip() for p in vary.split(",") if p.strip()] if vary else []
+                lows = {p.lower() for p in parts}
+                if "origin" not in lows:
+                    parts.append("Origin")
+                    headers["vary"] = ", ".join(parts)
+            await send(message)
+
+        await self.app(scope, receive, send_wrapper)
 
 
 app = FastAPI(title="REMI AI", version="1.0.0")
@@ -167,7 +181,14 @@ app.include_router(drive.router)
 
 @app.get("/api/health")
 def health():
-    return {"status": "ok"}
+    out: dict = {"status": "ok"}
+    if os.environ.get("REMIP_DEBUG", "").strip().lower() in ("1", "true", "yes"):
+        out["cors_origins"] = list(CORS_ORIGINS)
+        out["cors_origin_regex"] = CORS_ORIGIN_REGEX
+        out["postgres"] = bool(is_postgres())
+        out["has_google_client_id"] = bool(GOOGLE_CLIENT_ID)
+        out["has_session_secret"] = bool(SESSION_SECRET)
+    return out
 
 
 # Serve built frontend in production (single-origin deploy)

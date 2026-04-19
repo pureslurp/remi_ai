@@ -28,7 +28,11 @@ def create_session_token(account_id: str) -> str:
 
 def decode_session_token(token: str) -> str | None:
     try:
-        data = jwt.decode(token, _signing_key(), algorithms=["HS256"])
+        key = _signing_key()
+    except RuntimeError:
+        return None
+    try:
+        data = jwt.decode(token, key, algorithms=["HS256"])
         sub = data.get("sub")
         return str(sub) if sub else None
     except jwt.PyJWTError:
