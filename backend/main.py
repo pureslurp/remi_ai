@@ -45,12 +45,12 @@ DB_INIT_STATUS: dict = {"ok": False, "ran_at": None, "duration_ms": None, "error
 def _bootstrap_postgres() -> None:
     """Run Alembic upgrade head, but never let it kill the process.
 
-    If a migration hangs or errors, /api/health stays available with the
-    error so we can see what's wrong on Railway.
+    A migration failure is logged with full traceback and surfaced via
+    /api/health (db_init_ok=false, db_init_error=...) instead of crashing
+    uvicorn before it can serve a single request.
     """
     from alembic.config import Config
     from alembic import command
-    from sqlalchemy import create_engine
 
     started = time.monotonic()
     _dbu = urlparse(os.environ.get("DATABASE_URL", ""))
@@ -67,32 +67,10 @@ def _bootstrap_postgres() -> None:
             "Session pooler strings need user postgres.<PROJECT_REF>. Wrong user -> auth failure / hang."
         )
 
-    # Optional: separate connection for migrations only. Use this if the runtime
-    # pooler hangs on advisory locks or DDL (set MIGRATION_DATABASE_URL to the
-    # direct, non-pooler Supabase URL on Railway).
-    migration_url = os.environ.get("MIGRATION_DATABASE_URL", "").strip() or None
-    if migration_url:
-        logger.info("Using MIGRATION_DATABASE_URL for alembic upgrade (separate from runtime URL)")
-
     _alembic_ini = Path(__file__).parent / "alembic.ini"
-    cfg = Config(str(_alembic_ini))
-    if migration_url:
-        cfg.set_main_option("sqlalchemy.url", migration_url.replace("%", "%%"))
-
-    # Bound the migration so a stuck advisory lock or query is visible
-    # within ~60s instead of silently hanging forever.
-    mig_engine = create_engine(
-        migration_url or os.environ["DATABASE_URL"],
-        connect_args={"connect_timeout": 15},
-        pool_pre_ping=True,
-    )
     try:
-        with mig_engine.connect() as c:
-            c.execute(text("SET lock_timeout = '30s'"))
-            c.execute(text("SET statement_timeout = '60s'"))
-            c.execute(text("SET idle_in_transaction_session_timeout = '60s'"))
         logger.info("Alembic: starting upgrade head")
-        command.upgrade(cfg, "head")
+        command.upgrade(Config(str(_alembic_ini)), "head")
         logger.info("Alembic: upgrade head completed in %.0fms", (time.monotonic() - started) * 1000)
         DB_INIT_STATUS.update(
             ok=True,
@@ -101,16 +79,13 @@ def _bootstrap_postgres() -> None:
             error=None,
         )
     except Exception as exc:
-        tb = traceback.format_exc()
-        logger.error("Alembic upgrade FAILED: %s\n%s", exc, tb)
+        logger.error("Alembic upgrade FAILED: %s\n%s", exc, traceback.format_exc())
         DB_INIT_STATUS.update(
             ok=False,
             ran_at=time.time(),
             duration_ms=int((time.monotonic() - started) * 1000),
             error=f"{type(exc).__name__}: {exc}",
         )
-    finally:
-        mig_engine.dispose()
 
 
 def _bootstrap_sqlite() -> None:
@@ -273,61 +248,6 @@ def health():
         out["has_google_client_id"] = bool(GOOGLE_CLIENT_ID)
         out["has_session_secret"] = bool(SESSION_SECRET)
         out["db_init"] = DB_INIT_STATUS
-    return out
-
-
-@app.get("/api/debug/db")
-def debug_db():
-    """Counts and ownership snapshot of the live DB. Requires REMIP_DEBUG=1.
-
-    Use this to verify which Supabase project the backend is talking to and
-    whether your data is there but owned by a different account_id.
-    """
-    if os.environ.get("REMIP_DEBUG", "").strip().lower() not in ("1", "true", "yes"):
-        return {"error": "REMIP_DEBUG not enabled"}
-
-    out: dict = {"db": "postgres" if is_postgres() else "sqlite"}
-    try:
-        with engine.connect() as c:
-            if is_postgres():
-                out["server_version"] = c.execute(text("SHOW server_version")).scalar()
-                out["current_database"] = c.execute(text("SELECT current_database()")).scalar()
-                out["current_user"] = c.execute(text("SELECT current_user")).scalar()
-                row = c.execute(text("SELECT inet_server_addr()::text, inet_server_port()")).fetchone()
-                if row:
-                    out["server_addr"] = row[0]
-                    out["server_port"] = row[1]
-                ver = c.execute(text("SELECT version_num FROM alembic_version")).fetchone()
-                out["alembic_version"] = ver[0] if ver else None
-
-            tables = ["accounts", "projects", "google_oauth_credentials", "documents", "email_threads", "email_messages"]
-            counts: dict = {}
-            for t in tables:
-                try:
-                    counts[t] = c.execute(text(f"SELECT count(*) FROM {t}")).scalar()
-                except Exception as exc:
-                    counts[t] = f"error: {type(exc).__name__}: {exc}"
-            out["counts"] = counts
-
-            try:
-                rows = c.execute(
-                    text(
-                        "SELECT owner_id, count(*) AS n FROM projects GROUP BY owner_id ORDER BY n DESC"
-                    )
-                ).fetchall()
-                out["projects_by_owner"] = [{"owner_id": r[0], "count": r[1]} for r in rows]
-            except Exception as exc:
-                out["projects_by_owner_error"] = f"{type(exc).__name__}: {exc}"
-
-            try:
-                rows = c.execute(
-                    text("SELECT id, email, name FROM accounts ORDER BY created_at NULLS LAST")
-                ).fetchall()
-                out["accounts"] = [{"id": r[0], "email": r[1], "name": r[2]} for r in rows]
-            except Exception as exc:
-                out["accounts_error"] = f"{type(exc).__name__}: {exc}"
-    except Exception as exc:
-        out["error"] = f"{type(exc).__name__}: {exc}"
     return out
 
 
