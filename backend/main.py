@@ -5,14 +5,12 @@ import traceback
 from pathlib import Path
 from urllib.parse import urlparse
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from dotenv import load_dotenv
 from starlette.datastructures import MutableHeaders
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
-
-load_dotenv(Path(__file__).parent.parent / ".env")
 
 from config import CORS_ORIGIN_REGEX, CORS_ORIGINS, GOOGLE_CLIENT_ID, LOGS_DIR, is_postgres, SESSION_SECRET
 from sqlalchemy import text
@@ -22,7 +20,7 @@ from sqlalchemy import text
 _log_handlers = [logging.StreamHandler()]
 try:
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    _log_handlers.append(logging.FileHandler(LOGS_DIR / "remi.log"))
+    _log_handlers.append(logging.FileHandler(LOGS_DIR / "kova.log"))
 except OSError:
     pass
 
@@ -32,7 +30,7 @@ logging.basicConfig(
     handlers=_log_handlers,
     force=True,
 )
-logger = logging.getLogger("remi")
+logger = logging.getLogger("kova")
 
 from database import engine, Base
 import models  # ensure all ORM models are registered
@@ -203,7 +201,7 @@ class ApiNoCacheMiddleware:
         await self.app(scope, receive, send_wrapper)
 
 
-app = FastAPI(title="REMI AI", version="1.0.0")
+app = FastAPI(title="Kova", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -253,7 +251,11 @@ def health():
     }
     if not DB_INIT_STATUS.get("ok") and DB_INIT_STATUS.get("error"):
         out["db_init_error"] = DB_INIT_STATUS["error"]
-    if os.environ.get("REMIP_DEBUG", "").strip().lower() in ("1", "true", "yes"):
+    _debug_flag = (
+        os.environ.get("KOVA_DEBUG", "").strip()
+        or os.environ.get("REMIP_DEBUG", "").strip()
+    )
+    if _debug_flag.lower() in ("1", "true", "yes"):
         out["cors_origins"] = list(CORS_ORIGINS)
         out["cors_origin_regex"] = CORS_ORIGIN_REGEX
         out["postgres"] = bool(is_postgres())
@@ -261,6 +263,20 @@ def health():
         out["has_session_secret"] = bool(SESSION_SECRET)
         out["db_init"] = DB_INIT_STATUS
     return out
+
+
+# Browsers request /favicon.ico from whatever origin is used; in local dev the API
+# may be opened on :8000 without the Vite dev server, so serve the same asset as the SPA.
+_frontend_public = Path(__file__).parent.parent / "frontend" / "public"
+_favicon_svg = _frontend_public / "favicon.svg"
+
+
+@app.get("/favicon.ico", include_in_schema=False)
+@app.get("/favicon.svg", include_in_schema=False)
+def favicon():
+    if _favicon_svg.is_file():
+        return FileResponse(_favicon_svg, media_type="image/svg+xml")
+    raise HTTPException(status_code=404)
 
 
 # Serve built frontend in production (single-origin deploy)

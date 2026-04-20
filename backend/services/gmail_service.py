@@ -11,6 +11,13 @@ from services.document_service import process_bytes
 from services import google_token_store
 
 
+def _pg_safe_str(s: str | None) -> str:
+    """Postgres text cannot contain NUL; Gmail / MIME data sometimes does."""
+    if s is None:
+        return ""
+    return str(s).replace("\x00", "")
+
+
 def _get_creds():
     from google.oauth2.credentials import Credentials
     from google.auth.transport.requests import Request
@@ -78,7 +85,7 @@ def _extract_attachments(payload: dict, message_id: str, project_id: str,
     mime = payload.get("mimeType", "")
     if mime in SUPPORTED:
         attachment_id = payload.get("body", {}).get("attachmentId")
-        filename = payload.get("filename", "attachment")
+        filename = _pg_safe_str(payload.get("filename") or "attachment") or "attachment"
         if attachment_id:
             att = gmail.users().messages().attachments().get(
                 userId="me", messageId=message_id, id=attachment_id
@@ -249,13 +256,13 @@ def sync_gmail(project: Project, db: Session) -> dict:
                     continue
 
                 headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
-                subject = headers.get("Subject", "")
-                from_addr = headers.get("From", "")
-                to_addrs = [a.strip() for a in headers.get("To", "").split(",") if a.strip()]
-                cc_addrs = [a.strip() for a in headers.get("Cc", "").split(",") if a.strip()]
+                subject = _pg_safe_str(headers.get("Subject", ""))
+                from_addr = _pg_safe_str(headers.get("From", ""))
+                to_addrs = [_pg_safe_str(a.strip()) for a in headers.get("To", "").split(",") if a.strip()]
+                cc_addrs = [_pg_safe_str(a.strip()) for a in headers.get("Cc", "").split(",") if a.strip()]
                 date = _parse_date(headers.get("Date", ""))
-                body = _decode_body(msg.get("payload", {}))
-                snippet = msg.get("snippet", "")
+                body = _pg_safe_str(_decode_body(msg.get("payload", {})))
+                snippet = _pg_safe_str(msg.get("snippet", ""))
 
                 # Filter: only keep if involves client's email addresses (From / To / Cc)
                 all_addrs = [from_addr] + to_addrs + cc_addrs
@@ -308,7 +315,11 @@ def sync_gmail(project: Project, db: Session) -> dict:
     if latest_history_id:
         project.gmail_history_id = latest_history_id
     project.last_gmail_sync = datetime.utcnow()
-    db.commit()
+    try:
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
 
     if messages_imported:
         msg = (

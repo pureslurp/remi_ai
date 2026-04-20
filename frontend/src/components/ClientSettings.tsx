@@ -32,10 +32,10 @@ function Section({ title, defaultOpen = true, children }: {
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center justify-between mb-2 group"
       >
-        <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 group-hover:text-gray-200 transition">
+        <h3 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-brand-cloud/55 group-hover:text-brand-cloud transition">
           {title}
         </h3>
-        <span className="text-gray-600 group-hover:text-gray-400 transition text-xs">{open ? '▲' : '▼'}</span>
+        <span className="text-brand-cloud/35 group-hover:text-brand-cloud/65 transition text-xs">{open ? '▲' : '▼'}</span>
       </button>
       {open && children}
     </section>
@@ -160,31 +160,35 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
       <div className="p-4 space-y-5">
 
         {/* Profile */}
-        <Section title="Profile">
+        <Section title="Client">
           <div className="space-y-2">
             <input
-              className="w-full bg-gray-800 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-sm text-brand-cloud placeholder-brand-cloud/35 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50"
               value={name}
               onChange={e => setName(e.target.value)}
               onBlur={() => name !== project.name && save({ name })}
               placeholder="Client name"
             />
-            <div className="flex items-center gap-2 px-3 py-2 bg-gray-800 rounded-lg">
-              <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                project.client_type === 'buyer' ? 'bg-blue-900 text-blue-300' : project.client_type === 'seller' ? 'bg-emerald-900 text-emerald-300' : 'bg-purple-900 text-purple-300'
+            <div className="flex items-center gap-2 px-3 py-2 bg-white/[0.03] border border-white/10 rounded-lg">
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium uppercase tracking-wide border ${
+                project.client_type === 'buyer'
+                  ? 'bg-brand-mint/10 text-brand-mint/90 border-brand-mint/20'
+                  : project.client_type === 'seller'
+                  ? 'bg-amber-300/10 text-amber-200/90 border-amber-300/20'
+                  : 'bg-brand-cloud/10 text-brand-cloud/80 border-brand-cloud/20'
               }`}>
                 {project.client_type}
               </span>
             </div>
             <input
-              className="w-full bg-gray-800 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500"
+              className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-sm text-brand-cloud placeholder-brand-cloud/35 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50"
               value={phone}
               onChange={e => setPhone(e.target.value)}
               onBlur={() => phone !== (project.phone || '') && save({ phone })}
               placeholder="Phone"
             />
             <textarea
-              className="w-full bg-gray-800 rounded-lg px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-blue-500 resize-none"
+              className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-sm text-brand-cloud placeholder-brand-cloud/35 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50 resize-none"
               value={notes}
               onChange={e => setNotes(e.target.value)}
               onBlur={() => notes !== (project.notes || '') && save({ notes })}
@@ -211,11 +215,11 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
 
         {/* Gmail */}
         <Section title="Gmail Sync" defaultOpen={false}>
-          <p className="text-xs text-gray-500 mb-2">
+          <p className="text-xs text-brand-cloud/50 mb-2 leading-relaxed">
             Threads match when the client’s email appears in From or To. Optional filters below apply only when you add an address — hover a chip to see saved rules.
           </p>
           {(project.gmail_keywords || []).length > 0 && (
-            <p className="text-xs text-amber-500/90 mb-2">
+            <p className="text-xs text-amber-300/90 mb-2">
               Global keywords still apply to addresses added without filters: {(project.gmail_keywords || []).join(', ')}
             </p>
           )}
@@ -224,45 +228,45 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
               <span
                 key={email}
                 title={gmailAddressTitle(project, email)}
-                className="flex items-center gap-1 bg-gray-800 text-xs px-2 py-1 rounded-full text-gray-300 max-w-full"
+                className="flex items-center gap-1 bg-white/[0.04] border border-white/10 text-xs px-2 py-1 rounded-full text-brand-cloud/85 max-w-full"
               >
                 <span className="truncate">{email}</span>
-                <button type="button" onClick={() => removeEmail(email)} className="text-gray-500 hover:text-red-400 transition shrink-0">×</button>
+                <button type="button" onClick={() => removeEmail(email)} className="text-brand-cloud/45 hover:text-red-300 transition shrink-0">×</button>
               </span>
             ))}
           </div>
-          <div className="space-y-2 mb-3 rounded-lg border border-gray-700/60 bg-gray-800/30 p-3">
+          <div className="space-y-2 mb-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
             <div className="flex gap-2">
               <input
-                className="flex-1 bg-gray-800 rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-blue-500"
+                className="flex-1 bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-xs text-brand-cloud placeholder-brand-cloud/35 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50"
                 value={emailInput}
                 onChange={e => setEmailInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && addEmail()}
                 placeholder="Email address…"
               />
-              <button type="button" onClick={addEmail} className="bg-gray-700 hover:bg-gray-600 px-3 py-2 rounded-lg text-xs transition shrink-0">
+              <button type="button" onClick={addEmail} className="bg-white/[0.06] border border-white/10 hover:bg-white/[0.1] px-3 py-2 rounded-lg text-xs text-brand-cloud transition shrink-0">
                 Add
               </button>
             </div>
-            <p className="text-[11px] text-gray-500">Optional — only for this address</p>
+            <p className="text-[11px] text-brand-cloud/45">Optional — only for this address</p>
             <input
-              className="w-full bg-gray-800 rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-xs text-brand-cloud placeholder-brand-cloud/35 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50"
               value={newEmailKeywords}
               onChange={e => setNewEmailKeywords(e.target.value)}
               placeholder="Subject must contain (comma-separated)…"
             />
-            <label className="flex items-center gap-2 text-[11px] text-gray-500">
-              <span className="shrink-0 text-gray-500">On or after</span>
+            <label className="flex items-center gap-2 text-[11px] text-brand-cloud/55">
+              <span className="shrink-0">On or after</span>
               <input
                 type="date"
-                className="flex-1 min-w-0 bg-gray-800 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-indigo-500 text-gray-300"
+                className="flex-1 min-w-0 bg-white/[0.04] border border-white/10 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50 text-brand-cloud/85"
                 value={newEmailAfterDate}
                 onChange={e => setNewEmailAfterDate(e.target.value)}
               />
             </label>
           </div>
           {!googleConnected && (
-            <p className="text-xs text-yellow-400 mb-2">Connect Google in settings to enable sync.</p>
+            <p className="text-xs text-amber-300 mb-2">Connect Google in settings to enable sync.</p>
           )}
           <SyncStatus
             label="Gmail"
@@ -271,40 +275,40 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
             syncing={gmailSyncing}
             message={gmailMsg}
           />
-          <p className="text-[11px] text-gray-500 mt-2">
+          <p className="text-[11px] text-brand-cloud/45 mt-2 leading-relaxed">
             Message bodies stay in this Gmail section (and in chat context). Documents lists files only —
             mostly Drive plus PDF or Word attachments from mail.
           </p>
           {gmailThreadsForProject.length > 0 && (
-            <div className="mt-3 space-y-2 border-t border-gray-700/60 pt-3">
-              <p className="text-xs font-medium text-gray-400">
+            <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-brand-cloud/55">
                 Synced threads ({gmailThreadsForProject.length})
               </p>
               <ul className="space-y-2 max-h-56 overflow-y-auto pr-1">
                 {gmailThreadsForProject.map(thread => (
                     <li
                       key={thread.id}
-                      className="rounded-lg border border-gray-700/50 bg-gray-900/40 px-2 py-2 text-xs"
+                      className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-2 text-xs"
                     >
-                      <p className="font-medium text-gray-200 truncate" title={thread.subject || ''}>
+                      <p className="font-medium text-brand-cloud/90 truncate" title={thread.subject || ''}>
                         {thread.subject || '(no subject)'}
                       </p>
-                      <p className="text-[11px] text-gray-500 mt-0.5">
+                      <p className="text-[11px] text-brand-cloud/45 mt-0.5">
                         {(thread.messages?.length ?? 0)} message(s)
                         {thread.last_message_date
                           ? ` · last ${new Date(thread.last_message_date).toLocaleString()}`
                           : ''}
                       </p>
                       {(thread.messages?.length ?? 0) > 0 && (
-                        <ul className="mt-2 space-y-1 border-t border-gray-800 pt-2 text-[11px] text-gray-400">
+                        <ul className="mt-2 space-y-1 border-t border-white/5 pt-2 text-[11px] text-brand-cloud/60">
                           {thread.messages!.slice(-5).map(m => (
-                            <li key={m.id} className="pl-1 border-l border-gray-600">
-                              <span className="text-gray-500">
+                            <li key={m.id} className="pl-1 border-l border-white/10">
+                              <span className="text-brand-cloud/45">
                                 {m.date ? new Date(m.date).toLocaleDateString() : ''}
                                 {m.from_addr ? ` · ${m.from_addr.slice(0, 48)}` : ''}
                               </span>
                               {m.snippet && (
-                                <p className="text-gray-400 mt-0.5 line-clamp-2">{m.snippet}</p>
+                                <p className="text-brand-cloud/60 mt-0.5 line-clamp-2">{m.snippet}</p>
                               )}
                             </li>
                           ))}
@@ -321,7 +325,7 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
         <Section title="Google Drive Sync" defaultOpen={false}>
           <div className="flex gap-2 mb-3">
             <input
-              className="flex-1 bg-gray-800 rounded-lg px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-blue-500"
+              className="flex-1 bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-xs text-brand-cloud placeholder-brand-cloud/35 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50"
               value={driveUrl}
               onChange={e => setDriveUrl(e.target.value)}
               onBlur={saveDriveUrl}
@@ -338,19 +342,19 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
         </Section>
 
         {/* Danger zone */}
-        <section className="border-t border-gray-800 pt-4">
+        <section className="border-t border-white/5 pt-4">
           {clearConfirm ? (
-            <div className="bg-red-900/30 border border-red-800 rounded-xl p-3">
-              <p className="text-xs text-red-300 mb-2">Clear all chat history for this client?</p>
+            <div className="bg-red-500/10 border border-red-400/30 rounded-xl p-3">
+              <p className="text-xs text-red-100 mb-2">Clear all chat history for this client?</p>
               <div className="flex gap-2">
-                <button onClick={() => setClearConfirm(false)} className="flex-1 py-1.5 bg-gray-700 rounded text-xs hover:bg-gray-600 transition">Cancel</button>
-                <button onClick={clearChat} className="flex-1 py-1.5 bg-red-700 rounded text-xs hover:bg-red-600 transition">Clear</button>
+                <button onClick={() => setClearConfirm(false)} className="flex-1 py-1.5 bg-white/[0.05] border border-white/10 rounded text-xs text-brand-cloud hover:bg-white/[0.08] transition">Cancel</button>
+                <button onClick={clearChat} className="flex-1 py-1.5 bg-red-500/80 rounded text-xs text-white hover:bg-red-500 transition">Clear</button>
               </div>
             </div>
           ) : (
             <button
               onClick={() => setClearConfirm(true)}
-              className="w-full py-2 text-xs text-gray-500 hover:text-red-400 transition"
+              className="w-full py-2 text-xs text-brand-cloud/45 hover:text-red-300 transition"
             >
               Clear Chat History
             </button>

@@ -67,10 +67,10 @@ export default function DocumentList({ projectId, documents }: Props) {
       <div
         onDrop={handleDrop}
         onDragOver={e => e.preventDefault()}
-        className="border-2 border-dashed border-gray-700 hover:border-gray-500 rounded-xl p-3 mb-2 text-center transition cursor-pointer"
+        className="border-2 border-dashed border-white/10 hover:border-brand-mint/40 rounded-xl p-3 mb-2 text-center transition cursor-pointer bg-white/[0.02]"
         onClick={() => fileRef.current?.click()}
       >
-        <p className="text-xs text-gray-400">
+        <p className="text-xs text-brand-cloud/60">
           {uploading ? 'Uploading…' : 'Drop file or click to upload (PDF, DOCX, TXT)'}
         </p>
         <input ref={fileRef} type="file" className="hidden" accept=".pdf,.docx,.txt" onChange={handleUpload} />
@@ -78,25 +78,25 @@ export default function DocumentList({ projectId, documents }: Props) {
 
       <div className="space-y-1">
         {documents.map(doc => (
-          <div key={doc.id} className="flex items-center gap-2 py-1.5 px-2 rounded-lg bg-gray-800/40 hover:bg-gray-800 group transition">
+          <div key={doc.id} className="flex items-center gap-2 py-1.5 px-2 rounded-lg bg-white/[0.03] border border-transparent hover:border-white/10 hover:bg-white/[0.05] group transition">
             <span className="text-sm shrink-0">{sourceIcon(doc.source)}</span>
             <div className="flex-1 min-w-0">
-              <p className="text-xs truncate text-gray-200">{doc.filename}</p>
-              <p className="text-xs text-gray-500">
+              <p className="text-xs truncate text-brand-cloud/90">{doc.filename}</p>
+              <p className="text-xs text-brand-cloud/45">
                 {fmtSize(doc.size_bytes)}
                 {doc.chunk_count > 0 && ` · ${doc.chunk_count} chunks`}
               </p>
             </div>
             <button
               onClick={() => handleDelete(doc)}
-              className="text-gray-600 hover:text-red-400 transition opacity-0 group-hover:opacity-100 shrink-0"
+              className="text-brand-cloud/40 hover:text-red-300 transition opacity-0 group-hover:opacity-100 shrink-0"
             >
               ×
             </button>
           </div>
         ))}
         {documents.length === 0 && (
-          <p className="text-xs text-gray-500">No documents yet.</p>
+          <p className="text-xs text-brand-cloud/45">No documents yet.</p>
         )}
       </div>
     </div>

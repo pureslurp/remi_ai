@@ -1,7 +1,9 @@
 import { useState } from 'react'
+import { createPortal } from 'react-dom'
 import { useAppStore } from '../store/appStore'
 import * as api from '../api/client'
 import type { Project } from '../types'
+import { clientTypeSidebarPillClass } from '../lib/clientTypeStyles'
 import UserProfile from './UserProfile'
 
 interface PersonFields {
@@ -28,38 +30,38 @@ function PersonForm({
     onChange({ ...person, [key]: e.target.value })
 
   return (
-    <div className="bg-gray-700/50 rounded-xl p-3 space-y-2">
+    <div className="rounded-xl border border-white/10 bg-white/[0.03] p-3 space-y-2">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-medium text-gray-400">{label}</span>
+        <span className="text-[11px] font-medium uppercase tracking-wider text-brand-cloud/50">{label}</span>
         {onRemove && (
-          <button onClick={onRemove} className="text-xs text-gray-500 hover:text-red-400 transition">
+          <button onClick={onRemove} className="text-xs text-brand-cloud/40 hover:text-red-300 transition">
             Remove
           </button>
         )}
       </div>
       <div className="flex gap-2">
         <input
-          className="flex-1 bg-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-sm text-brand-cloud placeholder-brand-cloud/40 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50"
           placeholder="First name"
           value={person.firstName}
           onChange={set('firstName')}
         />
         <input
-          className="flex-1 bg-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+          className="flex-1 bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-sm text-brand-cloud placeholder-brand-cloud/40 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50"
           placeholder="Last name"
           value={person.lastName}
           onChange={set('lastName')}
         />
       </div>
       <input
-        className="w-full bg-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-sm text-brand-cloud placeholder-brand-cloud/40 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50"
         placeholder="Email address"
         type="email"
         value={person.email}
         onChange={set('email')}
       />
       <input
-        className="w-full bg-gray-700 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-500"
+        className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-sm text-brand-cloud placeholder-brand-cloud/40 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50"
         placeholder="Phone (optional)"
         value={person.phone}
         onChange={set('phone')}
@@ -82,7 +84,6 @@ function NewClientModal({ onClose, onCreated }: { onClose: () => void; onCreated
     if (!first) return ''
     const primaryName = last ? `${first} ${last}` : first
     if (!spouseFirst) return primaryName
-    // If spouse has same last name (or no last name entered), show "John & Mary Smith"
     if (!spouseLast || spouseLast.toLowerCase() === last.toLowerCase()) {
       return `${first} & ${spouseFirst}${last ? ' ' + last : ''}`
     }
@@ -109,10 +110,10 @@ function NewClientModal({ onClose, onCreated }: { onClose: () => void; onCreated
 
   const preview = buildName()
 
-  return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 overflow-y-auto py-8">
-      <div className="bg-gray-800 rounded-xl p-6 w-full max-w-md shadow-xl mx-4">
-        <h2 className="text-lg font-semibold mb-4">New Client</h2>
+  const modal = (
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 overflow-y-auto py-8">
+      <div className="bg-gradient-to-br from-brand-navy to-brand-slate/90 border border-white/10 rounded-2xl p-6 w-full max-w-md shadow-2xl mx-4">
+        <h2 className="text-lg font-semibold mb-4 text-brand-cloud tracking-tight">New Client</h2>
         <div className="space-y-3">
           <PersonForm label="Primary Client" person={primary} onChange={setPrimary} />
 
@@ -126,27 +127,29 @@ function NewClientModal({ onClose, onCreated }: { onClose: () => void; onCreated
           ) : (
             <button
               onClick={() => setSpouse(emptyPerson())}
-              className="w-full py-2 border border-dashed border-gray-600 hover:border-gray-400 rounded-xl text-xs text-gray-400 hover:text-gray-200 transition"
+              className="w-full py-2 border border-dashed border-white/15 hover:border-brand-mint/50 rounded-xl text-xs text-brand-cloud/60 hover:text-brand-cloud transition"
             >
               + Add Spouse / Partner
             </button>
           )}
 
           {preview && (
-            <p className="text-xs text-gray-400 px-1">
-              Name: <span className="text-white font-medium">{preview}</span>
+            <p className="text-xs text-brand-cloud/60 px-1">
+              Name: <span className="text-brand-cloud font-medium">{preview}</span>
             </p>
           )}
 
           <div>
-            <p className="text-xs text-gray-400 mb-2">Transaction type</p>
+            <p className="text-[11px] uppercase tracking-wider text-brand-cloud/50 mb-2">Transaction type</p>
             <div className="flex gap-2">
               {(['buyer', 'seller', 'buyer & seller'] as const).map(t => (
                 <button
                   key={t}
                   onClick={() => setClientType(t)}
-                  className={`flex-1 py-2 rounded-lg text-xs font-medium capitalize transition ${
-                    clientType === t ? 'bg-blue-600 text-white' : 'bg-gray-700 text-gray-300 hover:bg-gray-600'
+                  className={`flex-1 py-2 rounded-lg text-xs font-medium capitalize transition border ${
+                    clientType === t
+                      ? 'bg-brand-mint/15 border-brand-mint/60 text-brand-cloud'
+                      : 'bg-white/[0.03] border-white/10 text-brand-cloud/70 hover:bg-white/[0.06]'
                   }`}
                 >
                   {t}
@@ -159,14 +162,14 @@ function NewClientModal({ onClose, onCreated }: { onClose: () => void; onCreated
         <div className="flex gap-2 mt-5">
           <button
             onClick={onClose}
-            className="flex-1 py-2 rounded-lg bg-gray-700 text-sm hover:bg-gray-600 transition"
+            className="flex-1 py-2 rounded-lg bg-white/[0.05] border border-white/10 text-sm text-brand-cloud hover:bg-white/[0.08] transition"
           >
             Cancel
           </button>
           <button
             onClick={submit}
             disabled={loading || !buildName()}
-            className="flex-1 py-2 rounded-lg bg-blue-600 text-sm font-medium hover:bg-blue-500 transition disabled:opacity-50"
+            className="flex-1 py-2 rounded-lg bg-brand-mint text-brand-navy text-sm font-semibold hover:bg-brand-mint/90 transition disabled:opacity-50"
           >
             {loading ? 'Creating…' : 'Create Client'}
           </button>
@@ -174,9 +177,56 @@ function NewClientModal({ onClose, onCreated }: { onClose: () => void; onCreated
       </div>
     </div>
   )
+
+  return typeof document !== 'undefined' ? createPortal(modal, document.body) : modal
 }
 
-export default function Sidebar() {
+function clientInitials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase()
+}
+
+function IconChevronLeft({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 18l-6-6 6-6" />
+    </svg>
+  )
+}
+
+function IconChevronRight({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 18l6-6-6-6" />
+    </svg>
+  )
+}
+
+function IconPanelOff({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path strokeLinecap="round" d="M6 6l12 12M18 6L6 18" />
+    </svg>
+  )
+}
+
+export type SidebarShell = 'expanded' | 'collapsed'
+
+type SidebarProps = {
+  shell?: SidebarShell
+  onExpandShell?: () => void
+  onCollapseToRail?: () => void
+  onHideShell?: () => void
+}
+
+export default function Sidebar({
+  shell = 'expanded',
+  onExpandShell,
+  onCollapseToRail,
+  onHideShell,
+}: SidebarProps) {
   const { projects, activeProjectId, setProjects, setActiveProject } = useAppStore()
   const [showModal, setShowModal] = useState(false)
 
@@ -186,15 +236,111 @@ export default function Sidebar() {
     setShowModal(false)
   }
 
+  const modal = showModal ? (
+    <NewClientModal onClose={() => setShowModal(false)} onCreated={handleCreated} />
+  ) : null
+
+  if (shell === 'collapsed') {
+    return (
+      <div className="flex flex-col h-full min-h-0 bg-black/25 backdrop-blur-sm border-r border-white/5 items-center py-2 gap-2">
+        <button
+          type="button"
+          onClick={onExpandShell}
+          title="Expand sidebar"
+          className="p-1.5 rounded-lg text-brand-cloud/60 hover:text-brand-cloud hover:bg-white/[0.06] transition"
+        >
+          <IconChevronRight className="w-5 h-5" />
+        </button>
+        <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center shrink-0">
+          <span className="text-brand-cloud text-sm font-semibold tracking-tight">K</span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowModal(true)}
+          title="New client"
+          className="w-9 h-9 rounded-lg text-lg font-medium leading-none text-brand-cloud bg-white/[0.06] border border-white/10 hover:bg-white/[0.1] hover:border-brand-mint/40 transition"
+        >
+          +
+        </button>
+
+        <div className="flex-1 min-h-0 overflow-y-auto w-full flex flex-col items-center gap-1.5 py-1 px-1">
+          {projects.length === 0 && (
+            <p className="text-brand-cloud/35 text-[10px] text-center px-1 leading-snug">No clients</p>
+          )}
+          {projects.map(p => {
+            const isActive = activeProjectId === p.id
+            return (
+              <button
+                key={p.id}
+                type="button"
+                title={p.name}
+                onClick={() => setActiveProject(p.id)}
+                className={`w-10 h-10 shrink-0 rounded-xl text-[11px] font-semibold tracking-tight transition border ${
+                  isActive
+                    ? 'bg-brand-mint/20 border-brand-mint text-brand-cloud ring-1 ring-brand-mint/50'
+                    : 'bg-white/[0.04] border-white/10 text-brand-cloud/85 hover:bg-white/[0.08]'
+                }`}
+              >
+                {clientInitials(p.name)}
+              </button>
+            )
+          })}
+        </div>
+
+        {onHideShell && (
+          <button
+            type="button"
+            onClick={onHideShell}
+            title="Hide sidebar completely"
+            className="p-1.5 rounded-lg text-brand-cloud/35 hover:text-brand-cloud/70 hover:bg-white/[0.05] transition"
+          >
+            <IconPanelOff className="w-4 h-4" />
+          </button>
+        )}
+
+        <UserProfile compact />
+
+        {modal}
+      </div>
+    )
+  }
+
   return (
-    <div className="flex flex-col h-full min-h-0 bg-gray-900 border-r border-gray-800">
-      <div className="p-4 border-b border-gray-800 shrink-0">
-        <div className="flex items-center justify-between mb-3">
-          <h1 className="text-lg font-bold text-white">REMI AI</h1>
+    <div className="flex flex-col h-full min-h-0 bg-black/25 backdrop-blur-sm border-r border-white/5">
+      <div className="p-4 border-b border-white/5 shrink-0">
+        <div className="flex items-start justify-between gap-2 mb-3">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center shrink-0">
+              <span className="text-brand-cloud text-sm font-semibold tracking-tight">K</span>
+            </div>
+            <h1 className="font-display text-xl font-semibold text-brand-cloud tracking-tight truncate">Kova</h1>
+          </div>
+          <div className="flex shrink-0 gap-0.5">
+            {onCollapseToRail && (
+              <button
+                type="button"
+                onClick={onCollapseToRail}
+                title="Minimize to slim strip"
+                className="p-1.5 rounded-lg text-brand-cloud/45 hover:text-brand-cloud hover:bg-white/[0.06] transition"
+              >
+                <IconChevronLeft className="w-4 h-4" />
+              </button>
+            )}
+            {onHideShell && (
+              <button
+                type="button"
+                onClick={onHideShell}
+                title="Hide sidebar completely"
+                className="p-1.5 rounded-lg text-brand-cloud/45 hover:text-brand-cloud hover:bg-white/[0.06] transition"
+              >
+                <IconPanelOff className="w-4 h-4" />
+              </button>
+            )}
+          </div>
         </div>
         <button
           onClick={() => setShowModal(true)}
-          className="w-full py-2 bg-blue-600 hover:bg-blue-500 rounded-lg text-sm font-medium transition"
+          className="w-full py-2 rounded-lg text-sm font-medium text-brand-cloud bg-white/[0.05] border border-white/10 hover:bg-white/[0.1] hover:border-brand-mint/40 transition"
         >
           + New Client
         </button>
@@ -202,42 +348,43 @@ export default function Sidebar() {
 
       <div className="flex-1 min-h-0 overflow-y-auto py-2">
         {projects.length === 0 && (
-          <p className="text-gray-500 text-xs text-center px-4 py-8">
+          <p className="text-brand-cloud/40 text-xs text-center px-4 py-8 leading-relaxed">
             No clients yet. Create your first client above.
           </p>
         )}
-        {projects.map(p => (
-          <button
-            key={p.id}
-            onClick={() => setActiveProject(p.id)}
-            className={`w-full text-left px-4 py-3 transition hover:bg-gray-800 ${
-              activeProjectId === p.id ? 'bg-gray-800 border-l-2 border-blue-500' : ''
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium truncate flex-1">{p.name}</span>
-              <span
-                className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                  p.client_type === 'buyer'
-                    ? 'bg-blue-900 text-blue-300'
-                    : p.client_type === 'seller'
-                    ? 'bg-emerald-900 text-emerald-300'
-                    : 'bg-purple-900 text-purple-300'
-                }`}
-              >
-                {p.client_type}
-              </span>
-            </div>
-            <p className="text-xs text-gray-500 mt-0.5">
-              {new Date(p.created_at).toLocaleDateString()}
-            </p>
-          </button>
-        ))}
+        {projects.map(p => {
+          const isActive = activeProjectId === p.id
+          return (
+            <button
+              key={p.id}
+              onClick={() => setActiveProject(p.id)}
+              className={`w-full text-left px-4 py-3 transition border-l-2 ${
+                isActive
+                  ? 'bg-white/[0.04] border-brand-mint'
+                  : 'border-transparent hover:bg-white/[0.02]'
+              }`}
+            >
+              <div className="flex items-center gap-2">
+                <span className={`text-sm truncate flex-1 ${isActive ? 'text-brand-cloud font-medium' : 'text-brand-cloud/85'}`}>
+                  {p.name}
+                </span>
+                <span
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-medium uppercase tracking-wide ${clientTypeSidebarPillClass(
+                    p.client_type,
+                  )}`}
+                >
+                  {p.client_type}
+                </span>
+              </div>
+              <p className="text-[11px] text-brand-cloud/40 mt-0.5">
+                {new Date(p.created_at).toLocaleDateString()}
+              </p>
+            </button>
+          )
+        })}
       </div>
 
-      {showModal && (
-        <NewClientModal onClose={() => setShowModal(false)} onCreated={handleCreated} />
-      )}
+      {modal}
 
       <UserProfile />
     </div>

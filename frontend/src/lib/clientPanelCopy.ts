@@ -1,6 +1,7 @@
-import type { Project } from '../types'
+import type { ClientType } from './clientTypeStyles'
+import { clientTypePanelLeftAccentClass, normalizeClientType } from './clientTypeStyles'
 
-export type ClientType = Project['client_type']
+export type { ClientType }
 
 export interface ClientPanelCopy {
   transactionsSectionTitle: string
@@ -15,7 +16,9 @@ export interface ClientPanelCopy {
   panelAccentClass: string
 }
 
-const buyer: ClientPanelCopy = {
+type CopyCore = Omit<ClientPanelCopy, 'panelAccentClass'>
+
+const buyer: CopyCore = {
   transactionsSectionTitle: 'Properties & offers',
   transactionsSubtitle:
     'Each row is a home they are considering or under contract on — add one per property or deal.',
@@ -28,10 +31,9 @@ const buyer: ClientPanelCopy = {
   transactionNotesPlaceholder:
     'Offer history, counters, inspection, appraisal, lender conditions — anything specific to this purchase…',
   multiOfferSameListingHint: '', // not used for buyers
-  panelAccentClass: 'border-l-[3px] border-l-blue-500/70',
 }
 
-const seller: ClientPanelCopy = {
+const seller: CopyCore = {
   transactionsSectionTitle: 'Listing & buyer offers',
   transactionsSubtitle:
     'Their home is one listing (address and list price below). Add a row for each buyer’s offer — amount and offer date.',
@@ -45,10 +47,9 @@ const seller: ClientPanelCopy = {
   transactionNotesPlaceholder:
     'Buyer name (if known), contingencies vs other offers, concessions, close date…',
   multiOfferSameListingHint: '',
-  panelAccentClass: 'border-l-[3px] border-l-emerald-500/70',
 }
 
-const buyerSeller: ClientPanelCopy = {
+const buyerSeller: CopyCore = {
   transactionsSectionTitle: 'Buying & selling',
   transactionsSubtitle:
     'Track purchase deals and their sale in one list — use the address and notes to tell buying vs selling apart.',
@@ -61,19 +62,20 @@ const buyerSeller: ClientPanelCopy = {
   propertyContextLabel: 'Property',
   transactionNotesPlaceholder:
     'Deal-specific notes — whether this row is their purchase, their sale, or an offer they received…',
-  multiOfferSameListingHint: 'Multiple rows on the same address — confirm whether each is buy-side or sell-side in notes.',
-  panelAccentClass: 'border-l-[3px] border-l-purple-500/70',
+  multiOfferSameListingHint:
+    'Multiple rows on the same address — confirm whether each is buy-side or sell-side in notes.',
 }
 
-const byType: Record<ClientType, ClientPanelCopy> = {
+const byType: Record<ClientType, CopyCore> = {
   buyer,
   seller,
   'buyer & seller': buyerSeller,
 }
 
 export function getClientPanelCopy(clientType: string): ClientPanelCopy {
-  if (clientType === 'buyer' || clientType === 'seller' || clientType === 'buyer & seller') {
-    return byType[clientType]
+  const key = normalizeClientType(clientType)
+  return {
+    ...byType[key],
+    panelAccentClass: clientTypePanelLeftAccentClass(key),
   }
-  return buyer
 }

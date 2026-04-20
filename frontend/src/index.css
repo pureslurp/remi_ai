@@ -2,10 +2,46 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-gray-950 text-gray-100 h-screen overflow-hidden;
+:root {
+  --brand-navy-rgb: 24 24 27;
+  --brand-slate-rgb: 63 63 70;
+  --brand-cloud-rgb: 244 244 245;
+  --brand-mint-rgb: 96 165 250;
+  --page-glow-rgb: 96 165 250;
+  --page-bg-a: #18181b;
+  --page-bg-b: #27272a;
+  --page-bg-c: #3f3f46;
 }
 
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { @apply bg-gray-900; }
-::-webkit-scrollbar-thumb { @apply bg-gray-600 rounded; }
+html, body {
+  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-feature-settings: 'cv11', 'ss01';
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  @apply text-brand-cloud h-screen overflow-hidden;
+  background:
+    radial-gradient(1200px 600px at 15% -10%, rgb(var(--page-glow-rgb) / 0.06), transparent 60%),
+    linear-gradient(160deg, var(--page-bg-a) 0%, var(--page-bg-b) 50%, var(--page-bg-c) 100%);
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--brand-cloud-rgb) / 0.14);
+  border-radius: 6px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgb(var(--brand-cloud-rgb) / 0.24);
+}
+
+/* One tasteful page-load fade — Quiet Tech: no scattered micro-interactions. */
+@keyframes kova-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.kova-fade-in {
+  animation: kova-fade-in 320ms ease-out both;
+}

@@ -20,11 +20,11 @@ function daysUntil(d?: string) {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  active:     'bg-blue-900/60 text-blue-300',
-  pending:    'bg-yellow-900/60 text-yellow-300',
-  contingent: 'bg-orange-900/60 text-orange-300',
-  closed:     'bg-emerald-900/60 text-emerald-300',
-  dead:       'bg-gray-700 text-gray-400',
+  active:     'bg-brand-mint/15 text-brand-mint border border-brand-mint/30',
+  pending:    'bg-amber-300/10 text-amber-200 border border-amber-300/25',
+  contingent: 'bg-orange-400/10 text-orange-200 border border-orange-400/25',
+  closed:     'bg-brand-cloud/10 text-brand-cloud/90 border border-brand-cloud/20',
+  dead:       'bg-white/[0.05] text-brand-cloud/50 border border-white/10',
 }
 
 function DateChip({ kd, projectId, txId }: { kd: KeyDate; projectId: string; txId: string }) {
@@ -46,15 +46,15 @@ function DateChip({ kd, projectId, txId }: { kd: KeyDate; projectId: string; txI
 
   return (
     <div className={`flex items-center justify-between py-1.5 px-2 rounded-lg ${
-      urgent ? 'bg-orange-900/40 border border-orange-700/50' : 'bg-gray-800/50'
+      urgent ? 'bg-orange-400/10 border border-orange-400/30' : 'bg-white/[0.03] border border-white/5'
     }`}>
       <div className="flex items-center gap-2 min-w-0">
-        <input type="checkbox" checked={done} onChange={toggleDone} className="shrink-0 accent-blue-500" />
-        <span className={`text-xs truncate ${done ? 'line-through text-gray-500' : 'text-gray-200'}`}>
+        <input type="checkbox" checked={done} onChange={toggleDone} className="shrink-0 accent-brand-mint" />
+        <span className={`text-xs truncate ${done ? 'line-through text-brand-cloud/40' : 'text-brand-cloud/90'}`}>
           {kd.label}
         </span>
       </div>
-      <span className={`text-xs shrink-0 ml-2 ${urgent ? 'text-orange-400 font-medium' : 'text-gray-400'}`}>
+      <span className={`text-xs shrink-0 ml-2 ${urgent ? 'text-orange-300 font-medium' : 'text-brand-cloud/55'}`}>
         {fmtDate(kd.due_date)}
         {days !== null && !done && (
           <span className="ml-1">
@@ -83,7 +83,7 @@ function AddKeyDateForm({ projectId, txId, onAdded }: {
   return (
     <div className="flex gap-1 mt-1">
       <input
-        className="flex-1 bg-gray-700 rounded px-2 py-1 text-xs outline-none"
+        className="flex-1 bg-white/[0.04] border border-white/10 rounded px-2 py-1 text-xs text-brand-cloud placeholder-brand-cloud/35 outline-none focus:border-brand-mint/50"
         placeholder="Date label (e.g. Inspection deadline)"
         value={label}
         onChange={e => setLabel(e.target.value)}
@@ -91,11 +91,11 @@ function AddKeyDateForm({ projectId, txId, onAdded }: {
       />
       <input
         type="date"
-        className="bg-gray-700 rounded px-2 py-1 text-xs outline-none"
+        className="bg-white/[0.04] border border-white/10 rounded px-2 py-1 text-xs text-brand-cloud outline-none focus:border-brand-mint/50"
         value={date}
         onChange={e => setDate(e.target.value)}
       />
-      <button onClick={submit} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-xs transition">
+      <button onClick={submit} className="bg-brand-mint text-brand-navy hover:bg-brand-mint/90 px-2 py-1 rounded text-xs font-semibold transition">
         Add
       </button>
     </div>
@@ -144,77 +144,77 @@ function TransactionCard({
     ))
   }
 
-  const statusColor = STATUS_COLORS[tx.status] ?? 'bg-gray-700 text-gray-400'
+  const statusColor = STATUS_COLORS[tx.status] ?? 'bg-white/[0.05] text-brand-cloud/50 border border-white/10'
 
   return (
-    <div className="bg-gray-800/60 rounded-xl mb-3 overflow-hidden">
+    <div className="bg-white/[0.03] border border-white/10 rounded-xl mb-3 overflow-hidden">
       {/* Header — always visible */}
       <button
-        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-gray-800/80 transition text-left"
+        className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-white/[0.05] transition text-left"
         onClick={() => setExpanded(e => !e)}
       >
         <div className="flex-1 min-w-0">
           {variant === 'sellerOffer' ? (
             <>
-              <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-0.5">Buyer offer</p>
-              <p className="text-sm font-medium text-white">{fmtMoney(tx.offer_price)}</p>
-              <p className="text-xs text-gray-400 mt-0.5">
+              <p className="text-[10px] uppercase tracking-wider text-brand-cloud/45 mb-0.5">Buyer offer</p>
+              <p className="text-sm font-medium text-brand-cloud">{fmtMoney(tx.offer_price)}</p>
+              <p className="text-xs text-brand-cloud/60 mt-0.5">
                 Offer date {fmtDate(tx.offer_date)}
                 {tx.close_date ? ` · Close ${fmtDate(tx.close_date)}` : ''}
               </p>
             </>
           ) : (
             <>
-              <p className="text-[10px] uppercase tracking-wide text-gray-500 mb-0.5">{propertyContextLabel}</p>
-              <p className="text-sm font-medium text-white truncate">
+              <p className="text-[10px] uppercase tracking-wider text-brand-cloud/45 mb-0.5">{propertyContextLabel}</p>
+              <p className="text-sm font-medium text-brand-cloud truncate">
                 {prop?.address ?? 'No property linked'}
               </p>
-              <p className="text-xs text-gray-400 mt-0.5">
+              <p className="text-xs text-brand-cloud/60 mt-0.5">
                 {fmtMoney(tx.offer_price)} · {fmtDate(tx.close_date ?? tx.offer_date)}
               </p>
             </>
           )}
         </div>
         <div className="flex items-center gap-2 ml-2 shrink-0">
-          <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${statusColor}`}>
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium capitalize ${statusColor}`}>
             {tx.status}
           </span>
-          <span className="text-gray-500 text-xs">{expanded ? '▲' : '▼'}</span>
+          <span className="text-brand-cloud/40 text-xs">{expanded ? '▲' : '▼'}</span>
         </div>
       </button>
 
       {/* Expanded body */}
       {expanded && (
-        <div className="px-3 pb-3 space-y-2 border-t border-gray-700/50 pt-2">
+        <div className="px-3 pb-3 space-y-2 border-t border-white/5 pt-2">
           <div className="grid grid-cols-2 gap-x-3 text-xs">
             <div>
-              <span className="text-gray-400">Offer</span>
-              <p className="text-white font-medium">{fmtMoney(tx.offer_price)}</p>
+              <span className="text-brand-cloud/50">Offer</span>
+              <p className="text-brand-cloud font-medium">{fmtMoney(tx.offer_price)}</p>
             </div>
             <div>
-              <span className="text-gray-400">Earnest</span>
-              <p className="text-white font-medium">{fmtMoney(tx.earnest_money)}</p>
+              <span className="text-brand-cloud/50">Earnest</span>
+              <p className="text-brand-cloud font-medium">{fmtMoney(tx.earnest_money)}</p>
             </div>
             <div className="mt-1">
-              <span className="text-gray-400">Offer date</span>
-              <p className="text-white font-medium">{fmtDate(tx.offer_date)}</p>
+              <span className="text-brand-cloud/50">Offer date</span>
+              <p className="text-brand-cloud font-medium">{fmtDate(tx.offer_date)}</p>
             </div>
             <div className="mt-1">
-              <span className="text-gray-400">Close date</span>
-              <p className="text-white font-medium">{fmtDate(tx.close_date)}</p>
+              <span className="text-brand-cloud/50">Close date</span>
+              <p className="text-brand-cloud font-medium">{fmtDate(tx.close_date)}</p>
             </div>
           </div>
 
           {/* Status */}
           <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-400">Status:</span>
+            <span className="text-xs text-brand-cloud/55">Status:</span>
             <select
               value={tx.status}
               onChange={e => updateStatus(e.target.value)}
-              className="bg-gray-700 text-xs rounded px-1 py-0.5 outline-none text-gray-200"
+              className="bg-white/[0.04] border border-white/10 text-xs rounded px-1 py-0.5 outline-none text-brand-cloud/90"
             >
               {['active', 'pending', 'contingent', 'closed', 'dead'].map(s => (
-                <option key={s} value={s}>{s}</option>
+                <option key={s} value={s} className="bg-brand-navy text-brand-cloud">{s}</option>
               ))}
             </select>
           </div>
@@ -222,7 +222,7 @@ function TransactionCard({
           {/* Key dates */}
           {tx.key_dates.length > 0 && (
             <div className="space-y-1">
-              <p className="text-xs text-gray-400 font-medium">Key Dates</p>
+              <p className="text-[11px] text-brand-cloud/55 font-medium uppercase tracking-wider">Key Dates</p>
               {tx.key_dates.map(kd => (
                 <DateChip key={kd.id} kd={kd} projectId={projectId} txId={tx.id} />
               ))}
@@ -232,29 +232,29 @@ function TransactionCard({
 
           {/* Transaction notes */}
           <div>
-            <p className="text-xs text-gray-400 font-medium mb-1">Transaction Notes</p>
+            <p className="text-[11px] text-brand-cloud/55 font-medium uppercase tracking-wider mb-1">Transaction Notes</p>
             <textarea
-              className="w-full bg-gray-700 rounded-lg px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-blue-500 resize-none text-gray-100"
+              className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-2 py-1.5 text-xs outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50 resize-none text-brand-cloud placeholder-brand-cloud/35"
               rows={3}
               placeholder={transactionNotesPlaceholder}
               value={notes}
               onChange={e => setNotes(e.target.value)}
               onBlur={saveNotes}
             />
-            {savingNotes && <p className="text-xs text-gray-500">Saving…</p>}
+            {savingNotes && <p className="text-xs text-brand-cloud/45">Saving…</p>}
           </div>
 
           {/* Delete */}
           {confirmDelete ? (
             <div className="flex items-center gap-2 pt-1">
-              <p className="text-xs text-red-400 flex-1">Delete this transaction?</p>
-              <button onClick={() => setConfirmDelete(false)} className="text-xs text-gray-400 hover:text-gray-200 transition">Cancel</button>
+              <p className="text-xs text-red-300 flex-1">Delete this transaction?</p>
+              <button onClick={() => setConfirmDelete(false)} className="text-xs text-brand-cloud/55 hover:text-brand-cloud transition">Cancel</button>
               <button
                 onClick={async () => {
                   await api.deleteTransaction(projectId, tx.id)
                   setTransactions(transactions.filter(t => t.id !== tx.id))
                 }}
-                className="text-xs text-red-400 hover:text-red-300 transition font-medium"
+                className="text-xs text-red-300 hover:text-red-200 transition font-medium"
               >
                 Delete
               </button>
@@ -262,7 +262,7 @@ function TransactionCard({
           ) : (
             <button
               onClick={() => setConfirmDelete(true)}
-              className="text-xs text-gray-600 hover:text-red-400 transition pt-1"
+              className="text-xs text-brand-cloud/40 hover:text-red-300 transition pt-1"
             >
               Delete transaction
             </button>

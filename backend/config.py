@@ -1,16 +1,57 @@
 from pathlib import Path
+import logging
 import os
+import shutil
 
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).parent.parent / ".env")
+# override=True: values in .env win over pre-set shell env (e.g. stale DATABASE_URL).
+# Default dotenv behavior leaves existing env vars untouched, which breaks local dev
+# when the shell still has an old direct Supabase host but .env was updated to pooler.
+load_dotenv(Path(__file__).parent.parent / ".env", override=True)
 
-REMI_HOME = Path(os.environ.get("REMI_HOME", str(Path.home() / ".remi")))
-DB_PATH = REMI_HOME / "remi.db"
-PROJECTS_DIR = REMI_HOME / "projects"
-CREDENTIALS_PATH = REMI_HOME / "credentials.json"
-TOKEN_PATH = REMI_HOME / "google_token.json"
-LOGS_DIR = Path(os.environ.get("LOG_DIR", str(REMI_HOME / "logs")))
+# Primary env var is KOVA_HOME; fall back to legacy REMI_HOME so existing
+# deployments with the old var keep booting during rename.
+_kova_home_env = os.environ.get("KOVA_HOME", "").strip()
+_legacy_remi_home_env = os.environ.get("REMI_HOME", "").strip()
+KOVA_HOME = Path(
+    _kova_home_env or _legacy_remi_home_env or str(Path.home() / ".kova")
+)
+
+# One-time, best-effort migration of ~/.remi -> ~/.kova for local dev users
+# upgrading in place. Never crash startup on a cosmetic rename — the DB is
+# authoritative and failures here just mean the old dir is still around.
+_legacy_home = Path.home() / ".remi"
+try:
+    if (
+        not _kova_home_env
+        and not _legacy_remi_home_env
+        and _legacy_home.exists()
+        and not KOVA_HOME.exists()
+    ):
+        shutil.move(str(_legacy_home), str(KOVA_HOME))
+        logging.getLogger("kova").info(
+            "Migrated legacy data dir %s -> %s", _legacy_home, KOVA_HOME
+        )
+except Exception as _exc:  # noqa: BLE001 — best-effort migration
+    logging.getLogger("kova").warning(
+        "Legacy ~/.remi migration skipped: %s", _exc
+    )
+
+DB_PATH = KOVA_HOME / "kova.db"
+# If migrated (or legacy install with old DB name), rename remi.db -> kova.db once.
+try:
+    _legacy_db = KOVA_HOME / "remi.db"
+    if _legacy_db.exists() and not DB_PATH.exists():
+        _legacy_db.rename(DB_PATH)
+        logging.getLogger("kova").info("Renamed %s -> %s", _legacy_db, DB_PATH)
+except Exception as _exc:  # noqa: BLE001
+    logging.getLogger("kova").warning("Legacy remi.db rename skipped: %s", _exc)
+
+PROJECTS_DIR = KOVA_HOME / "projects"
+CREDENTIALS_PATH = KOVA_HOME / "credentials.json"
+TOKEN_PATH = KOVA_HOME / "google_token.json"
+LOGS_DIR = Path(os.environ.get("LOG_DIR", str(KOVA_HOME / "logs")))
 
 # Prefer DATABASE_URL (e.g. Supabase Postgres). Falls back to local SQLite.
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip() or None
@@ -25,6 +66,45 @@ def is_postgres() -> bool:
         DATABASE_URL
         and DATABASE_URL.split(":", 1)[0].startswith("postgres")
     )
+
+
+def postgres_connection_diagnostics() -> dict[str, str | bool | None]:
+    """Safe fields for /api/auth/google/diagnostics — no passwords."""
+    out: dict[str, str | bool | None] = {
+        "database_url_configured": bool(DATABASE_URL),
+        "postgres_mode": bool(is_postgres()),
+        "database_url_hostname": None,
+        "looks_like_supabase_direct_db_host": False,
+        "local_dev_hint": None,
+    }
+    if not DATABASE_URL or not is_postgres():
+        return out
+    hostname: str | None = None
+    try:
+        from urllib.parse import urlparse
+
+        raw = DATABASE_URL.strip()
+        if "://" in raw and raw.split("://", 1)[0].startswith("postgresql+"):
+            raw = "postgresql://" + raw.split("://", 1)[1]
+        u = urlparse(raw)
+        hostname = u.hostname
+    except Exception:
+        hostname = None
+    out["database_url_hostname"] = hostname
+    direct = bool(
+        hostname
+        and hostname.startswith("db.")
+        and "supabase.co" in hostname
+        and "pooler" not in hostname
+    )
+    out["looks_like_supabase_direct_db_host"] = direct
+    if direct:
+        out["local_dev_hint"] = (
+            "Replace DATABASE_URL with the Session pooler URI from Supabase → Connect "
+            "(Session mode / IPv4). Do not use the 'Direct connection' host db.*.supabase.co "
+            "on a Mac/home network — it often resolves to IPv6 and fails with connection refused."
+        )
+    return out
 
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip() or None
@@ -76,10 +156,11 @@ GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/userinfo.email",
 ]
 
-# OAuth callback must match GCP "Authorized redirect URIs"
+# OAuth callback must match GCP "Authorized redirect URIs".
+# Default port 5173 matches Vite dev (`/api` proxied); cookie + redirect stay on the same origin.
 GOOGLE_REDIRECT_URI = os.environ.get(
     "GOOGLE_REDIRECT_URI",
-    "http://localhost:8000/api/auth/google/callback",
+    "http://localhost:5173/api/auth/google/callback",
 ).strip()
 
 # Where the browser lands after successful Google connect
@@ -87,7 +168,7 @@ FRONTEND_ORIGIN = _normalize_browser_origin(
     os.environ.get("FRONTEND_ORIGIN", "http://localhost:5173")
 )
 
-# Web OAuth (production) — if set, used instead of ~/.remi/credentials.json
+# Web OAuth (production) — if set, used instead of ~/.kova/credentials.json
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip() or None
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "").strip() or None
 
@@ -116,7 +197,7 @@ if FRONTEND_ORIGIN and FRONTEND_ORIGIN not in _seen_cors:
     CORS_ORIGINS.append(FRONTEND_ORIGIN)
 
 # Optional extra allowed Origin values (Starlette regex). Use for many Vercel preview URLs
-# without listing each one, e.g. r"https://remi-ai[-\w]*\.vercel\.app"
+# without listing each one, e.g. r"https://kova[-\w]*\.vercel\.app"
 # Validate at import: an invalid regex would otherwise crash *every* request when
 # Starlette lazily compiles it inside CORSMiddleware.__init__ on first use.
 import re as _re
@@ -130,7 +211,7 @@ if _cors_regex:
     except _re.error as _exc:
         import logging as _logging
 
-        _logging.getLogger("remi").error(
+        _logging.getLogger("kova").error(
             "CORS_ORIGIN_REGEX %r is not a valid Python regex (%s). Ignoring it. "
             "Use a regex like r'https://your-app[-\\w]*\\.vercel\\.app' (NOT a glob like *.vercel.app).",
             _cors_regex,
@@ -139,13 +220,13 @@ if _cors_regex:
 
 # Ensure runtime dirs exist (local / SQLite mode)
 if not is_postgres():
-    for _dir in (REMI_HOME, PROJECTS_DIR, LOGS_DIR):
+    for _dir in (KOVA_HOME, PROJECTS_DIR, LOGS_DIR):
         _dir.mkdir(parents=True, exist_ok=True)
 else:
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Multi-tenant session (Postgres + Google). SQLite uses implicit LOCAL_ACCOUNT_ID only.
 LOCAL_ACCOUNT_ID = "local"
-SESSION_COOKIE_NAME = os.environ.get("SESSION_COOKIE_NAME", "remi_session").strip() or "remi_session"
+SESSION_COOKIE_NAME = os.environ.get("SESSION_COOKIE_NAME", "kova_session").strip() or "kova_session"
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "").strip() or None
 SESSION_TTL_DAYS = int(os.environ.get("SESSION_TTL_DAYS", "14") or "14")
