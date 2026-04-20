@@ -20,7 +20,7 @@ from config import (
     use_supabase_storage,
 )
 
-logger = logging.getLogger("remi.storage")
+logger = logging.getLogger("kova.storage")
 
 _warned_invalid_config = False
 
@@ -105,7 +105,7 @@ def delete_file(object_key: str | None, project_id: str, filename: str) -> None:
             return
     # Sanitize filename + containment check: the filename comes from a DB row
     # whose value originated from an untrusted upload / Drive / Gmail source.
-    # Without this, a crafted filename like "../../remi.db" would resolve outside
+    # Without this, a crafted filename like "../../kova.db" would resolve outside
     # the project's docs dir and unlink arbitrary host files.
     safe = _safe_segment(filename)
     docs_dir = (PROJECTS_DIR / project_id / "docs").resolve()

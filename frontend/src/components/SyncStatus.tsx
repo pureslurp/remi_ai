@@ -19,21 +19,21 @@ interface Props {
 
 export default function SyncStatus({ label, lastSync, onSync, syncing, message }: Props) {
   return (
-    <div className="bg-gray-800/40 rounded-xl p-3">
+    <div className="bg-white/[0.03] border border-white/10 rounded-xl p-3">
       <div className="flex items-center justify-between mb-1">
-        <span className="text-xs font-medium text-gray-300">{label}</span>
+        <span className="text-xs font-medium text-brand-cloud/80">{label}</span>
         <button
           onClick={onSync}
           disabled={syncing}
-          className="text-xs text-blue-400 hover:text-blue-300 transition disabled:opacity-50"
+          className="text-xs text-brand-mint hover:text-brand-mint/80 transition disabled:opacity-50"
         >
           {syncing ? 'Syncing…' : 'Sync Now'}
         </button>
       </div>
-      <p className="text-xs text-gray-500">
+      <p className="text-xs text-brand-cloud/50">
         Last synced: {timeAgo(lastSync)}
       </p>
-      {message && <p className="text-xs text-green-400 mt-1">{message}</p>}
+      {message && <p className="text-xs text-brand-mint mt-1">{message}</p>}
     </div>
   )
 }

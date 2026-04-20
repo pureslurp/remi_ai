@@ -10,7 +10,12 @@ from models import Document, DocumentChunk
 from config import PROJECTS_DIR
 from services import object_storage
 
-logger = logging.getLogger("remi.docs")
+logger = logging.getLogger("kova.docs")
+
+
+def _pg_safe_text(s: str) -> str:
+    """Postgres rejects NUL in text / JSON string values."""
+    return (s or "").replace("\x00", "")
 
 
 def _try_write_local(project_id: str, filename: str, content: bytes) -> None:
@@ -42,21 +47,21 @@ def _extract_text(content: bytes, mime_type: str, filename: str) -> str:
             from pdfminer.layout import LAParams
             out = io.StringIO()
             extract_text_to_fp(io.BytesIO(content), out, laparams=LAParams())
-            return out.getvalue()
+            return _pg_safe_text(out.getvalue())
         except Exception:
             return ""
 
     if (mime_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            or ext == ".docx"):
+        or ext == ".docx"):
         try:
             from docx import Document as DocxDocument
             doc = DocxDocument(io.BytesIO(content))
-            return "\n".join(p.text for p in doc.paragraphs if p.text.strip())
+            return _pg_safe_text("\n".join(p.text for p in doc.paragraphs if p.text.strip()))
         except Exception:
             return ""
 
     if mime_type and mime_type.startswith("text/"):
-        return content.decode("utf-8", errors="replace")
+        return _pg_safe_text(content.decode("utf-8", errors="replace"))
 
     return ""
 
@@ -75,11 +80,12 @@ def _chunk_text(text: str, chunk_tokens: int = 1000) -> list[str]:
             current += sent + ". "
     if current.strip():
         chunks.append(current.strip())
-    return [c for c in chunks if c]
+    return [_pg_safe_text(c) for c in chunks if c]
 
 
 def process_upload(project_id: str, filename: str, content: bytes,
                    mime_type: str, db: Session) -> Document:
+    filename = _pg_safe_text(filename) or "file"
     file_hash = _sha256(content)
 
     # Dedup: skip if same file already in this project
@@ -123,6 +129,7 @@ def process_bytes(project_id: str, filename: str, content: bytes,
                   mime_type: str, source: str, db: Session,
                   drive_file_id: str = None, gmail_message_id: str = None) -> Document | None:
     """Generic ingestion used by Drive and Gmail services."""
+    filename = _pg_safe_text(filename) or "file"
     file_hash = _sha256(content)
     existing = db.query(Document).filter_by(project_id=project_id, file_hash=file_hash).first()
     if existing:

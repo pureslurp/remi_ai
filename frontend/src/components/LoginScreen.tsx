@@ -30,17 +30,20 @@ export default function LoginScreen({ needsDeviceLink }: Props) {
   }
 
   return (
-    <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center px-6">
+    <div className="min-h-screen flex flex-col items-center justify-center px-6 kova-fade-in">
       <div className="w-full max-w-md text-center">
-        <div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center text-3xl font-bold text-white mx-auto mb-6">
-          R
+        <div className="mx-auto mb-8 flex items-center justify-center gap-3">
+          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center">
+            <span className="text-brand-cloud text-xl font-semibold tracking-tight">K</span>
+          </div>
+          <h1 className="font-display text-4xl font-semibold text-brand-cloud tracking-tight">Kova</h1>
         </div>
-        <h1 className="text-2xl font-semibold text-white mb-2">REMI AI</h1>
-        <p className="text-gray-400 text-sm mb-8">
+        <p className="text-brand-cloud/60 text-sm mb-8 leading-relaxed">
           {needsDeviceLink ? (
             <>
-              This workspace is linked to Google on the server, but <strong className="text-gray-300">this browser</strong>{' '}
-              has not signed in yet. Continue with Google once to unlock REMI on this device.
+              This workspace is linked to Google on the server, but{' '}
+              <strong className="text-brand-cloud">this browser</strong> has not signed in yet. Continue with
+              Google once to unlock Kova on this device.
             </>
           ) : (
             <>
@@ -51,7 +54,7 @@ export default function LoginScreen({ needsDeviceLink }: Props) {
         </p>
 
         {error && (
-          <div className="mb-4 rounded-lg bg-red-950/60 border border-red-800/60 px-3 py-2 text-left text-xs text-red-200">
+          <div className="mb-4 rounded-lg bg-red-500/10 border border-red-400/30 px-3 py-2 text-left text-xs text-red-100">
             {error}
           </div>
         )}
@@ -60,11 +63,11 @@ export default function LoginScreen({ needsDeviceLink }: Props) {
           type="button"
           onClick={signIn}
           disabled={busy}
-          className="w-full py-3 rounded-xl bg-white text-gray-900 text-sm font-semibold hover:bg-gray-100 transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+          className="w-full py-3 rounded-xl bg-brand-cloud text-brand-navy text-sm font-semibold hover:bg-white transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-black/20"
         >
           {busy ? (
             <>
-              <span className="inline-block h-4 w-4 border-2 border-gray-400 border-t-gray-900 rounded-full animate-spin" />
+              <span className="inline-block h-4 w-4 border-2 border-brand-navy/30 border-t-brand-navy rounded-full animate-spin" />
               Connecting…
             </>
           ) : (
@@ -92,8 +95,8 @@ export default function LoginScreen({ needsDeviceLink }: Props) {
           )}
         </button>
 
-        <p className="mt-6 text-[11px] text-gray-600">
-          You will be asked to grant Gmail and Drive access so REMI can sync on your behalf.
+        <p className="mt-6 text-[11px] text-brand-cloud/40">
+          You will be asked to grant Gmail and Drive access so Kova can sync on your behalf.
         </p>
       </div>
     </div>

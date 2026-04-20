@@ -11,5 +11,5 @@ frontend/dist/
 .venv/
 
 # Never commit these — they contain your Google OAuth credentials and tokens
-~/.remi/credentials.json
-~/.remi/google_token.json
+~/.kova/credentials.json
+~/.kova/google_token.json

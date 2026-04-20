@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Copy REMI data from local SQLite (~/.remi/remi.db) into Supabase Postgres.
+Copy Kova data from local SQLite (~/.kova/kova.db) into Supabase Postgres.
 
 Uses DATABASE_URL from .env (repo root). Does not upload files under
-~/.remi/projects/... — only database rows. Document binaries need Supabase
+~/.kova/projects/... — only database rows. Document binaries need Supabase
 Storage (or re-upload) separately if you relied on local paths.
 
 Usage (from repo root):
   cd backend && python scripts/sqlite_to_supabase.py
   cd backend && python scripts/sqlite_to_supabase.py --replace
-  cd backend && python scripts/sqlite_to_supabase.py --sqlite-path /path/to/remi.db --dry-run
+  cd backend && python scripts/sqlite_to_supabase.py --sqlite-path /path/to/kova.db --dry-run
 """
 from __future__ import annotations
 
@@ -148,12 +148,12 @@ def main() -> None:
         "--sqlite-path",
         type=Path,
         default=None,
-        help=f"Default: REMI_HOME/remi.db (REMI_HOME default {Path.home() / '.remi'})",
+        help=f"Default: KOVA_HOME/kova.db (KOVA_HOME default {Path.home() / '.kova'})",
     )
     parser.add_argument(
         "--replace",
         action="store_true",
-        help="Truncate REMI tables on Postgres then copy (destructive on target).",
+        help="Truncate Kova tables on Postgres then copy (destructive on target).",
     )
     parser.add_argument(
         "--dry-run",
@@ -167,8 +167,18 @@ def main() -> None:
     if not pg_url.split(":", 1)[0].startswith("postgres"):
         sys.exit("Set DATABASE_URL in .env to your Supabase Postgres URL before running.")
 
-    remi_home = Path(os.environ.get("REMI_HOME", str(Path.home() / ".remi")))
-    sqlite_path = args.sqlite_path or (remi_home / "remi.db")
+    kova_home = Path(
+        os.environ.get("KOVA_HOME", "").strip()
+        or os.environ.get("REMI_HOME", "").strip()
+        or str(Path.home() / ".kova")
+    )
+    # Prefer kova.db, fall back to legacy remi.db for users who haven't migrated yet.
+    default_sqlite = kova_home / "kova.db"
+    if not default_sqlite.exists():
+        _legacy = kova_home / "remi.db"
+        if _legacy.exists():
+            default_sqlite = _legacy
+    sqlite_path = args.sqlite_path or default_sqlite
     if not sqlite_path.is_file():
         sys.exit(f"SQLite file not found: {sqlite_path}")
 

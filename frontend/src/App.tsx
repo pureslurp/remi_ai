@@ -1,12 +1,47 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { useAppStore } from './store/appStore'
 import * as api from './api/client'
 import Sidebar from './components/Sidebar'
 import ChatPanel from './components/ChatPanel'
 import ClientSettings from './components/ClientSettings'
 import LoginScreen from './components/LoginScreen'
+import ResizableDivider from './components/ResizableDivider'
 import { useProjectData } from './hooks/useProject'
 import type { Project } from './types'
+
+const LS_SIDEBAR = 'kova.layout.sidebarWidth'
+const LS_RIGHT = 'kova.layout.rightPanelWidth'
+const LS_SIDEBAR_MODE = 'kova.layout.sidebarMode'
+
+const SIDEBAR = { min: 200, max: 440, def: 220 } as const
+const SIDEBAR_RAIL = 52
+const RIGHT_PANEL = { min: 240, max: 560, def: 300 } as const
+
+type SidebarMode = 'expanded' | 'collapsed' | 'hidden'
+
+function clamp(n: number, lo: number, hi: number) {
+  return Math.min(hi, Math.max(lo, n))
+}
+
+function readStoredWidth(key: string, fallback: number, lo: number, hi: number) {
+  try {
+    const v = Number(localStorage.getItem(key))
+    if (!Number.isFinite(v)) return fallback
+    return clamp(v, lo, hi)
+  } catch {
+    return fallback
+  }
+}
+
+function readStoredSidebarMode(): SidebarMode {
+  try {
+    const v = localStorage.getItem(LS_SIDEBAR_MODE)
+    if (v === 'collapsed' || v === 'hidden' || v === 'expanded') return v
+  } catch {
+    /* ignore */
+  }
+  return 'expanded'
+}
 
 async function loadSessionProjects(
   setProjects: (p: Project[]) => void,
@@ -94,31 +129,78 @@ export default function App() {
 
   const activeProject = projects.find(p => p.id === activeProjectId)
 
+  const [sidebarMode, setSidebarMode] = useState<SidebarMode>(() => readStoredSidebarMode())
+  const [sidebarWidth, setSidebarWidth] = useState(() =>
+    readStoredWidth(LS_SIDEBAR, SIDEBAR.def, SIDEBAR.min, SIDEBAR.max),
+  )
+  const [rightPanelWidth, setRightPanelWidth] = useState(() =>
+    readStoredWidth(LS_RIGHT, RIGHT_PANEL.def, RIGHT_PANEL.min, RIGHT_PANEL.max),
+  )
+  const sidebarRef = useRef(sidebarWidth)
+  const rightRef = useRef(rightPanelWidth)
+  sidebarRef.current = sidebarWidth
+  rightRef.current = rightPanelWidth
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(LS_SIDEBAR_MODE, sidebarMode)
+    } catch {
+      /* private mode */
+    }
+  }, [sidebarMode])
+
+  const persistLayout = useCallback(() => {
+    try {
+      localStorage.setItem(LS_SIDEBAR, String(sidebarRef.current))
+      localStorage.setItem(LS_RIGHT, String(rightRef.current))
+    } catch {
+      /* private mode */
+    }
+  }, [])
+
+  const onSidebarDrag = useCallback((delta: number) => {
+    setSidebarWidth(w => {
+      const n = clamp(w + delta, SIDEBAR.min, SIDEBAR.max)
+      sidebarRef.current = n
+      return n
+    })
+  }, [])
+
+  const onRightPanelDrag = useCallback((delta: number) => {
+    // Divider sits between chat (left) and this pane: dragging the handle right
+    // moves the split right → wider chat, narrower right pane (opposite of sidebar).
+    setRightPanelWidth(w => {
+      const n = clamp(w - delta, RIGHT_PANEL.min, RIGHT_PANEL.max)
+      rightRef.current = n
+      return n
+    })
+  }, [])
+
   const handleProjectUpdated = (updated: Project) => {
     setProjects(projects.map(p => (p.id === updated.id ? updated : p)))
   }
 
   if (!authReady) {
     return (
-      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center gap-4">
-        <div className="h-9 w-9 border-2 border-gray-600 border-t-blue-500 rounded-full animate-spin" />
-        <p className="text-sm text-gray-400">Checking your session…</p>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4">
+        <div className="h-9 w-9 border-2 border-white/15 border-t-brand-mint rounded-full animate-spin" />
+        <p className="text-sm text-brand-cloud/60">Checking your session…</p>
       </div>
     )
   }
 
   if (authError) {
     return (
-      <div className="min-h-screen bg-gray-950 flex flex-col items-center justify-center px-6">
-        <div className="max-w-md w-full rounded-xl border border-red-800/50 bg-red-950/40 p-6 text-center">
-          <p className="text-sm text-red-200 mb-4">Could not reach the API: {authError}</p>
+      <div className="min-h-screen flex flex-col items-center justify-center px-6">
+        <div className="max-w-md w-full rounded-xl border border-red-400/30 bg-red-500/10 backdrop-blur-sm p-6 text-center">
+          <p className="text-sm text-red-100 mb-4">Could not reach the API: {authError}</p>
           <button
             type="button"
             onClick={() => {
               setAuthReady(false)
               bootstrap()
             }}
-            className="px-4 py-2 rounded-lg bg-gray-800 text-sm text-white hover:bg-gray-700 transition"
+            className="px-4 py-2 rounded-lg bg-white/10 border border-white/15 text-sm text-brand-cloud hover:bg-white/15 transition"
           >
             Retry
           </button>
@@ -132,30 +214,70 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen">
-      <div className="flex flex-1 overflow-hidden">
-        <div className="w-[220px] shrink-0">
-          <Sidebar />
-        </div>
+    <div className="flex flex-col h-screen kova-fade-in">
+      {sidebarMode === 'hidden' && (
+        <button
+          type="button"
+          aria-label="Show clients sidebar"
+          title="Show clients"
+          onClick={() => setSidebarMode('expanded')}
+          className="fixed left-0 top-1/2 z-50 -translate-y-1/2 flex items-center gap-0.5 rounded-r-lg border border-l-0 border-white/15 bg-black/55 backdrop-blur-md py-4 pl-1 pr-1.5 text-brand-cloud/75 hover:text-brand-cloud hover:bg-white/[0.08] transition shadow-lg"
+        >
+          <svg className="w-4 h-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 18l6-6-6-6" />
+          </svg>
+        </button>
+      )}
+
+      <div className="flex flex-1 min-h-0 overflow-hidden">
+        {sidebarMode !== 'hidden' && (
+          <>
+            <div
+              className="shrink-0 min-h-0 min-w-0 flex flex-col"
+              style={{ width: sidebarMode === 'collapsed' ? SIDEBAR_RAIL : sidebarWidth }}
+            >
+              <Sidebar
+                shell={sidebarMode === 'collapsed' ? 'collapsed' : 'expanded'}
+                onExpandShell={() => setSidebarMode('expanded')}
+                onCollapseToRail={() => setSidebarMode('collapsed')}
+                onHideShell={() => setSidebarMode('hidden')}
+              />
+            </div>
+
+            {sidebarMode === 'expanded' && (
+              <ResizableDivider onDrag={onSidebarDrag} onDragEnd={persistLayout} />
+            )}
+          </>
+        )}
 
         {activeProject ? (
           <>
-            <div className="flex-1 flex flex-col overflow-hidden border-x border-gray-800">
+            <div className="flex-1 min-w-[260px] min-h-0 flex flex-col overflow-hidden border-x border-white/5">
               <ChatPanel projectId={activeProject.id} projectName={activeProject.name} />
             </div>
 
-            <div className="w-[300px] shrink-0 bg-gray-900">
+            <ResizableDivider onDrag={onRightPanelDrag} onDragEnd={persistLayout} />
+
+            <div
+              className="shrink-0 min-h-0 min-w-0 flex flex-col bg-black/20 backdrop-blur-sm border-l border-white/5"
+              style={{ width: rightPanelWidth }}
+            >
               <ClientSettings project={activeProject} onProjectUpdated={handleProjectUpdated} />
             </div>
           </>
         ) : (
-          <div className="flex-1 flex items-center justify-center bg-gray-950">
-            <div className="text-center">
-              <div className="w-16 h-16 rounded-full bg-blue-600 flex items-center justify-center text-3xl font-bold mx-auto mb-4 text-white">
-                R
+          <div className="flex-1 min-w-[240px] min-h-0 flex items-center justify-center overflow-auto">
+            <div className="text-center px-6">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center text-3xl font-semibold mx-auto mb-5 text-brand-cloud tracking-tight">
+                K
               </div>
-              <h2 className="text-lg font-semibold text-white mb-1">Welcome to REMI AI</h2>
-              <p className="text-gray-400 text-sm">Create your first client in the sidebar to get started.</p>
+              <h2 className="text-xl font-semibold text-brand-cloud mb-1 tracking-tight">Welcome to Kova</h2>
+              <p className="text-brand-cloud/60 text-sm">Create your first client in the sidebar to get started.</p>
+              {sidebarMode === 'hidden' && (
+                <p className="text-brand-cloud/40 text-xs mt-3 max-w-sm mx-auto">
+                  Sidebar is hidden — use the tab on the left screen edge to open clients and add one.
+                </p>
+              )}
             </div>
           </div>
         )}

@@ -89,7 +89,7 @@ The backend now validates the regex at startup and ignores invalid values
       `CORS_ORIGINS` list already covers all origins you care about), **or set a
       valid Python regex** to also match Vercel preview URLs, e.g.:
       ```
-      CORS_ORIGIN_REGEX=^https://remi-ai[-\w]*\.vercel\.app$
+      CORS_ORIGIN_REGEX=^https://kova[-\w]*\.vercel\.app$
       ```
 
 ---
@@ -108,15 +108,15 @@ Once Railway picks up the cleanup commit:
 
 ---
 
-## 6. Optional: turn off `REMIP_DEBUG` on Railway
+## 6. Optional: turn off `KOVA_DEBUG` on Railway
 
-`REMIP_DEBUG=1` makes `/api/health` reveal extra config (CORS list, presence of
+`KOVA_DEBUG=1` (or legacy `REMIP_DEBUG=1`) makes `/api/health` reveal extra config (CORS list, presence of
 secrets as booleans, db init details). Useful while we were debugging; not
 needed in steady state. The `/api/debug/db` endpoint that depended on this flag
 has been removed from the codebase, so the flag now only affects `/api/health`'s
 verbosity.
 
-- [ ] Railway → Variables → delete `REMIP_DEBUG` (or set it to `0`).
+- [ ] Railway → Variables → delete `KOVA_DEBUG` and `REMIP_DEBUG` (or set them to `0`).
 
 ---
 
