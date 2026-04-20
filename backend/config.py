@@ -28,12 +28,22 @@ def is_postgres() -> bool:
 
 
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "").strip() or None
-SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip() or None
+# New-format key (sb_secret_...) is preferred; fall back to legacy service_role JWT
+# so in-flight rotations don't break the backend. Publishable key is frontend-safe
+# and not currently used server-side — surfaced for future client-side features.
+SUPABASE_SECRET_KEY = (
+    os.environ.get("SUPABASE_SECRET_KEY", "").strip()
+    or os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+    or None
+)
+# Back-compat alias: existing imports of SUPABASE_SERVICE_ROLE_KEY keep working.
+SUPABASE_SERVICE_ROLE_KEY = SUPABASE_SECRET_KEY
+SUPABASE_PUBLISHABLE_KEY = os.environ.get("SUPABASE_PUBLISHABLE_KEY", "").strip() or None
 SUPABASE_STORAGE_BUCKET = os.environ.get("SUPABASE_STORAGE_BUCKET", "project-docs").strip()
 
 
 def use_supabase_storage() -> bool:
-    return bool(SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY)
+    return bool(SUPABASE_URL and SUPABASE_SECRET_KEY)
 
 
 def _normalize_browser_origin(value: str) -> str:

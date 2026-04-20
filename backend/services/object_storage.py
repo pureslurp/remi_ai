@@ -103,7 +103,18 @@ def delete_file(object_key: str | None, project_id: str, filename: str) -> None:
         except Exception as exc:
             logger.warning("Supabase Storage delete failed for %s (%s)", object_key, exc)
             return
-    path = PROJECTS_DIR / project_id / "docs" / filename
+    # Sanitize filename + containment check: the filename comes from a DB row
+    # whose value originated from an untrusted upload / Drive / Gmail source.
+    # Without this, a crafted filename like "../../remi.db" would resolve outside
+    # the project's docs dir and unlink arbitrary host files.
+    safe = _safe_segment(filename)
+    docs_dir = (PROJECTS_DIR / project_id / "docs").resolve()
+    try:
+        path = (docs_dir / safe).resolve()
+        path.relative_to(docs_dir)  # raises ValueError if outside docs_dir
+    except (ValueError, OSError):
+        logger.warning("Refusing to delete out-of-tree path for %s/%s", project_id, filename)
+        return
     if path.exists():
         try:
             path.unlink()

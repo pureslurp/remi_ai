@@ -32,13 +32,19 @@ def list_documents(project: ProjectForUser, db: Session = Depends(get_db)):
 
 @router.post("", response_model=DocumentOut, status_code=201)
 async def upload_document(project: ProjectForUser, file: UploadFile = File(...), db: Session = Depends(get_db)):
+    from pathlib import Path as _Path
+
     content = await file.read()
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(413, f"File exceeds {MAX_UPLOAD_BYTES // 1024 // 1024}MB limit")
 
+    # Strip any path components from client-provided filename so nothing downstream
+    # (DB, local disk write, storage key) has to re-sanitize or trust a traversal.
+    safe_name = _Path(file.filename or "file").name or "file"
+
     doc = process_upload(
         project_id=project.id,
-        filename=file.filename,
+        filename=safe_name,
         content=content,
         mime_type=file.content_type,
         db=db,

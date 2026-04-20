@@ -1,4 +1,8 @@
+import hmac
+import hashlib
 import json
+import secrets
+import time
 import urllib.error
 import urllib.request
 from datetime import datetime
@@ -16,6 +20,7 @@ from config import (
     GOOGLE_SCOPES,
     LOCAL_ACCOUNT_ID,
     SESSION_COOKIE_NAME,
+    SESSION_SECRET,
     SESSION_TTL_DAYS,
     is_postgres,
 )
@@ -24,6 +29,51 @@ from deps.auth import require_account
 from deps.session_jwt import create_session_token, decode_session_token
 from models import Account
 from services import google_token_store
+
+# Short-lived cookie that binds the OAuth `state` param to this browser.
+# Without this, /api/auth/google/callback accepts any valid Google code+state,
+# which lets an attacker log the victim into the attacker's Google account
+# (OAuth login CSRF).
+_OAUTH_STATE_COOKIE = "remi_oauth_state"
+_OAUTH_STATE_TTL_SECONDS = 10 * 60  # 10 min — covers Google consent screen
+
+
+def _oauth_state_signing_key() -> bytes:
+    """Reuse SESSION_SECRET for HMAC if set; otherwise a local-only dev key."""
+    if SESSION_SECRET:
+        return SESSION_SECRET.encode("utf-8")
+    return b"sqlite-dev-oauth-state-key-not-for-production"
+
+
+def _mint_oauth_state() -> str:
+    nonce = secrets.token_urlsafe(24)
+    ts = str(int(time.time()))
+    mac = hmac.new(
+        _oauth_state_signing_key(), f"{nonce}.{ts}".encode(), hashlib.sha256
+    ).hexdigest()
+    return f"{nonce}.{ts}.{mac}"
+
+
+def _verify_oauth_state(received: str | None, cookie: str | None) -> bool:
+    if not received or not cookie:
+        return False
+    # Compare in constant time; must match the value we stored in the cookie.
+    if not hmac.compare_digest(received, cookie):
+        return False
+    parts = received.split(".")
+    if len(parts) != 3:
+        return False
+    nonce, ts, mac = parts
+    expected = hmac.new(
+        _oauth_state_signing_key(), f"{nonce}.{ts}".encode(), hashlib.sha256
+    ).hexdigest()
+    if not hmac.compare_digest(mac, expected):
+        return False
+    try:
+        issued = int(ts)
+    except ValueError:
+        return False
+    return (time.time() - issued) <= _OAUTH_STATE_TTL_SECONDS
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -100,7 +150,7 @@ def _upsert_account(db: Session, sub: str, email: str | None, name: str | None, 
 
 
 @router.get("/google/url")
-def google_auth_url():
+def google_auth_url(response: Response):
     try:
         flow = _get_flow()
     except FileNotFoundError:
@@ -109,12 +159,33 @@ def google_auth_url():
             "credentials.json not found at ~/.remi/credentials.json. "
             "See README for GCP setup, or set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET for web OAuth.",
         )
-    auth_url, _ = flow.authorization_url(access_type="offline", prompt="consent")
+    state = _mint_oauth_state()
+    auth_url, _ = flow.authorization_url(
+        access_type="offline", prompt="consent", state=state
+    )
+    # Browser returns this cookie alongside Google's ?state= on the callback;
+    # we require they match so an attacker-initiated code can't finish login.
+    response.set_cookie(
+        _OAUTH_STATE_COOKIE,
+        state,
+        httponly=True,
+        secure=True,
+        samesite="none",
+        max_age=_OAUTH_STATE_TTL_SECONDS,
+        path="/",
+    )
     return {"url": auth_url}
 
 
 @router.get("/google/callback")
-def google_callback(code: str, db: Session = Depends(get_db)):
+def google_callback(
+    request: Request,
+    code: str,
+    state: str | None = None,
+    db: Session = Depends(get_db),
+):
+    if not _verify_oauth_state(state, request.cookies.get(_OAUTH_STATE_COOKIE)):
+        raise HTTPException(400, "Invalid or expired OAuth state. Please retry sign-in.")
     flow = _get_flow()
     flow.fetch_token(code=code)
     creds = flow.credentials
@@ -133,6 +204,7 @@ def google_callback(code: str, db: Session = Depends(get_db)):
             max_age=SESSION_TTL_DAYS * 86400,
             path="/",
         )
+        resp.delete_cookie(_OAUTH_STATE_COOKIE, path="/", secure=True, samesite="none")
         return resp
 
     prof = _google_user_profile(creds.token)
@@ -153,6 +225,7 @@ def google_callback(code: str, db: Session = Depends(get_db)):
         max_age=SESSION_TTL_DAYS * 86400,
         path="/",
     )
+    resp.delete_cookie(_OAUTH_STATE_COOKIE, path="/", secure=True, samesite="none")
     return resp
 
 
