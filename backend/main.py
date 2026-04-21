@@ -177,6 +177,9 @@ def _bootstrap_sqlite() -> None:
             if pcols and "llm_model" not in pcols:
                 conn.execute(text("ALTER TABLE projects ADD COLUMN llm_model VARCHAR"))
                 conn.commit()
+            if pcols and "sale_property_id" not in pcols:
+                conn.execute(text("ALTER TABLE projects ADD COLUMN sale_property_id VARCHAR"))
+                conn.commit()
             try:
                 conn.execute(
                     text("UPDATE google_oauth_credentials SET id = 'local' WHERE id = 'default'")

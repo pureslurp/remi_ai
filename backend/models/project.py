@@ -35,5 +35,5 @@ class Project(Base):
     messages = relationship("ChatMessage", back_populates="project", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="project", cascade="all, delete-orphan")
     email_threads = relationship("EmailThread", back_populates="project", cascade="all, delete-orphan")
-    properties = relationship("Property", back_populates="project", cascade="all, delete-orphan")
+    properties = relationship("Property", back_populates="project", cascade="all, delete-orphan", foreign_keys="[Property.project_id]")
     transactions = relationship("Transaction", back_populates="project", cascade="all, delete-orphan")
