@@ -326,6 +326,9 @@ export default function LandingPage({ needsDeviceLink }: Props) {
             Anthropic, OpenAI, or Google DeepMind.
           </p>
           <p className="mt-3 font-landing-display text-sm text-brand-cloud/50">Kova</p>
+          <p className="mt-2">
+            <a href="/privacy" className="hover:text-brand-cloud/70 transition">Privacy Policy</a>
+          </p>
         </div>
       </footer>
     </div>
