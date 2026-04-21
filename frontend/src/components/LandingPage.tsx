@@ -248,17 +248,18 @@ export default function LandingPage({ needsDeviceLink }: Props) {
             Simple pricing
           </h2>
           <p className="mt-3 max-w-2xl text-brand-cloud/55">
-            Bring your own Anthropic API key. Paid billing is still rolling out, so the prices below reflect where
-            we&apos;re heading.
+            Start free, no credit card required. AI is included — no API keys to manage.
           </p>
           <ul className="mt-10 grid gap-6 lg:grid-cols-3">
             <li className="flex flex-col rounded-2xl border border-white/[0.08] bg-white/[0.02] p-7">
               <h3 className="font-landing-display text-2xl font-semibold text-brand-cloud">Free</h3>
               <p className="mt-1 text-3xl font-semibold tracking-tight text-brand-cloud">$0</p>
+              <p className="mt-1 text-xs text-brand-cloud/40">14-day trial, no card needed</p>
               <ul className="mt-6 flex-1 space-y-2 text-sm text-brand-cloud/55">
-                <li>Your own Anthropic API key</li>
-                <li>One active client at a time</li>
-                <li>Google sign-in</li>
+                <li>Limited AI usage</li>
+                <li>Standard AI models</li>
+                <li>1 active client workspace</li>
+                <li>All features unlocked</li>
               </ul>
               <button
                 type="button"
@@ -266,7 +267,7 @@ export default function LandingPage({ needsDeviceLink }: Props) {
                 disabled={busy}
                 className="mt-8 w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-brand-cloud transition hover:bg-white/[0.06] disabled:opacity-50"
               >
-                Get started
+                Start for free
               </button>
             </li>
             <li className="relative flex flex-col rounded-2xl border border-brand-mint/35 bg-gradient-to-b from-brand-mint/10 to-transparent p-7 shadow-lg shadow-brand-mint/5 ring-1 ring-brand-mint/20">
@@ -277,10 +278,12 @@ export default function LandingPage({ needsDeviceLink }: Props) {
               <p className="mt-1 text-3xl font-semibold tracking-tight text-brand-cloud">
                 $20<span className="text-base font-normal text-brand-cloud/50">/mo</span>
               </p>
+              <p className="mt-1 text-xs text-brand-cloud/40">Billed monthly, cancel anytime</p>
               <ul className="mt-6 flex-1 space-y-2 text-sm text-brand-cloud/70">
+                <li>Everything in Free, plus:</li>
+                <li>4× more AI usage</li>
+                <li>Advanced AI models</li>
                 <li>Unlimited clients</li>
-                <li>BYOK Anthropic</li>
-                <li>Priority access as we ship billing</li>
               </ul>
               <button
                 type="button"
@@ -288,7 +291,7 @@ export default function LandingPage({ needsDeviceLink }: Props) {
                 disabled={busy}
                 className="mt-8 w-full rounded-xl bg-brand-cloud py-3 text-sm font-semibold text-brand-navy shadow-md transition hover:bg-white disabled:opacity-50"
               >
-                Start with Google
+                Get started
               </button>
             </li>
             <li className="flex flex-col rounded-2xl border border-white/[0.08] bg-white/[0.02] p-7">
@@ -296,7 +299,8 @@ export default function LandingPage({ needsDeviceLink }: Props) {
               <p className="mt-1 text-lg text-brand-cloud/60">Brokerage-wide</p>
               <ul className="mt-6 flex-1 space-y-2 text-sm text-brand-cloud/55">
                 <li>Volume pricing, security review, and onboarding for your firm</li>
-                <li>Custom terms and rollout</li>
+                <li>Custom token limits and terms</li>
+                <li>Dedicated rollout support</li>
               </ul>
               {enterpriseMailto ? (
                 <a
@@ -313,35 +317,13 @@ export default function LandingPage({ needsDeviceLink }: Props) {
             </li>
           </ul>
         </section>
-
-        <section
-          className="mt-16 rounded-2xl border border-white/[0.07] bg-black/30 px-6 py-8 sm:px-10"
-          aria-labelledby="byok-heading"
-        >
-          <h2 id="byok-heading" className="font-landing-display text-2xl font-semibold text-brand-cloud">
-            Bring your own model key
-          </h2>
-          <p className="mt-3 max-w-3xl text-sm leading-relaxed text-brand-cloud/60">
-            You supply your own Anthropic API key, so usage and spend stay on your side of the fence. Where the key
-            lives depends on your deployment, so check your host&apos;s docs for how to set{' '}
-            <code className="rounded bg-white/10 px-1.5 py-0.5 text-xs text-brand-cloud/80">ANTHROPIC_API_KEY</code>.
-          </p>
-          <a
-            href="https://console.anthropic.com/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="mt-5 inline-flex text-sm font-medium text-brand-mint hover:text-brand-cloud transition motion-reduce:transition-none"
-          >
-            Get a key at Anthropic Console →
-          </a>
-        </section>
       </main>
 
       <footer className="relative border-t border-white/[0.06] px-5 py-10 sm:px-8">
         <div className="mx-auto max-w-6xl text-center text-xs leading-relaxed text-brand-cloud/40">
           <p>
-            Email and document sync are optional and only bring in what you choose. Kova is not affiliated with Google or
-            Anthropic.
+            Email and document sync are optional and only bring in what you choose. Kova is not affiliated with Google,
+            Anthropic, OpenAI, or Google DeepMind.
           </p>
           <p className="mt-3 font-landing-display text-sm text-brand-cloud/50">Kova</p>
         </div>

@@ -24,12 +24,27 @@ def list_projects(db: Session = Depends(get_db), account_id: str = Depends(requi
     )
 
 
+FREE_TIER_CLIENT_LIMIT = 1
+
+
 @router.post("", response_model=ProjectOut, status_code=201)
 def create_project(
     body: ProjectCreate,
     db: Session = Depends(get_db),
     account_id: str = Depends(require_account),
 ):
+    acc = db.get(Account, account_id)
+    tier = subscription_tier(acc) if acc else "trial"
+    if tier == "trial":
+        existing = db.query(Project).filter(Project.owner_id == account_id).count()
+        if existing >= FREE_TIER_CLIENT_LIMIT:
+            raise HTTPException(
+                status_code=403,
+                detail={
+                    "code": "free_client_limit",
+                    "message": f"Free accounts are limited to {FREE_TIER_CLIENT_LIMIT} client workspace. Upgrade to Pro for unlimited clients.",
+                },
+            )
     project = Project(**body.model_dump(), owner_id=account_id)
     db.add(project)
     db.commit()
