@@ -254,7 +254,7 @@ export default function LandingPage({ needsDeviceLink }: Props) {
             <li className="flex flex-col rounded-2xl border border-white/[0.08] bg-white/[0.02] p-7">
               <h3 className="font-landing-display text-2xl font-semibold text-brand-cloud">Free</h3>
               <p className="mt-1 text-3xl font-semibold tracking-tight text-brand-cloud">$0</p>
-              <p className="mt-1 text-xs text-brand-cloud/40">14-day trial, no card needed</p>
+              <p className="mt-1 text-xs text-brand-cloud/40">No credit card needed</p>
               <ul className="mt-6 flex-1 space-y-2 text-sm text-brand-cloud/55">
                 <li>Limited AI usage</li>
                 <li>Standard AI models</li>
@@ -326,8 +326,10 @@ export default function LandingPage({ needsDeviceLink }: Props) {
             Anthropic, OpenAI, or Google DeepMind.
           </p>
           <p className="mt-3 font-landing-display text-sm text-brand-cloud/50">Kova</p>
-          <p className="mt-2">
+          <p className="mt-2 flex items-center justify-center gap-4">
             <a href="/privacy" className="hover:text-brand-cloud/70 transition">Privacy Policy</a>
+            <span aria-hidden>·</span>
+            <a href="/terms" className="hover:text-brand-cloud/70 transition">Terms of Service</a>
           </p>
         </div>
       </footer>

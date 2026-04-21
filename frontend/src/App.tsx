@@ -6,6 +6,7 @@ import ChatPanel from './components/ChatPanel'
 import ClientSettings from './components/ClientSettings'
 import LandingPage from './components/LandingPage'
 import PrivacyPolicy from './components/PrivacyPolicy'
+import TermsOfService from './components/TermsOfService'
 import ResizableDivider from './components/ResizableDivider'
 import { useProjectData } from './hooks/useProject'
 import type { Project } from './types'
@@ -60,9 +61,8 @@ async function loadSessionProjects(
 }
 
 export default function App() {
-  if (window.location.pathname === '/privacy') {
-    return <PrivacyPolicy />
-  }
+  if (window.location.pathname === '/privacy') return <PrivacyPolicy />
+  if (window.location.pathname === '/terms') return <TermsOfService />
 
   const { projects, activeProjectId, setProjects, setActiveProject, setGoogleConnected, setGoogleUser } =
     useAppStore()

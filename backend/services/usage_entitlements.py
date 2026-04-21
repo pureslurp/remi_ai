@@ -5,7 +5,7 @@ Per-user / BYOK API keys are out of scope (fully managed host keys only).
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import TYPE_CHECKING
 
 from fastapi import HTTPException
@@ -16,7 +16,6 @@ from config import (
     LOCAL_ACCOUNT_ID,
     OUTPUT_TOKEN_QUOTA_MULTIPLIER,
     PRO_INCLUDED_TOKENS_PER_MONTH,
-    TRIAL_MAX_DAYS,
     TRIAL_MAX_TOKENS,
     UPGRADE_CHECKOUT_URL,
 )
@@ -143,23 +142,7 @@ def assert_chat_allowed(account: Account, db: Session, estimated_additional_toke
             )
         return
 
-    # trial
-    if getattr(account, "trial_started_at", None) is None:
-        account.trial_started_at = _utcnow()
-
-    started = account.trial_started_at
-    assert started is not None
-    if _utcnow() - started > timedelta(days=TRIAL_MAX_DAYS):
-        raise HTTPException(
-            status_code=402,
-            detail={
-                "code": "trial_expired",
-                "message": f"Your {TRIAL_MAX_DAYS}-day trial has ended.",
-                "instruction": "Upgrade to Pro to keep using Kova with higher monthly limits.",
-                "upgrade_url": UPGRADE_CHECKOUT_URL,
-            },
-        )
-
+    # free tier — token cap only, no time limit
     used = int(getattr(account, "trial_tokens_used", 0) or 0)
     if used >= TRIAL_MAX_TOKENS:
         raise HTTPException(
