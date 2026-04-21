@@ -15,6 +15,8 @@ const config: Config = {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         display: ['Inter', 'system-ui', 'sans-serif'],
+        landingDisplay: ['"Cormorant Garamond"', 'Georgia', 'serif'],
+        landingSans: ['Manrope', 'system-ui', 'sans-serif'],
       },
     },
   },

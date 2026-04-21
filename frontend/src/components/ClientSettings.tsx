@@ -205,6 +205,8 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
             clientType={project.client_type}
             properties={properties}
             transactions={transactions}
+            salePropertyId={project.client_type === 'buyer & seller' ? project.sale_property_id : undefined}
+            onProjectUpdated={onProjectUpdated}
           />
         </Section>
 

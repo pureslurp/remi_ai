@@ -6,6 +6,7 @@ from deps.auth import CurrentAccount
 from models import Account
 from schemas.account_settings import SystemPromptsOut, SystemPromptsUpdate, normalize_override_updates
 from services.context_builder import default_strategy_prompts_for_api
+from services.usage_entitlements import entitlements_payload
 
 router = APIRouter(prefix="/api/account", tags=["account"])
 
@@ -14,6 +15,14 @@ _OVERRIDE_ATTR = {
     "override_seller": "system_prompt_seller",
     "override_buyer_seller": "system_prompt_buyer_seller",
 }
+
+
+@router.get("/entitlements")
+def get_entitlements(account_id: CurrentAccount, db: Session = Depends(get_db)):
+    acc = db.query(Account).filter_by(id=account_id).first()
+    if not acc:
+        raise HTTPException(status_code=404, detail="Account not found")
+    return entitlements_payload(acc)
 
 
 @router.get("/system-prompts", response_model=SystemPromptsOut)

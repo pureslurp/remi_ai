@@ -135,8 +135,38 @@ def _normalize_browser_origin(value: str) -> str:
 
 
 # Model — NOT claude-opus-4-7, intentionally sonnet for cost/speed balance
-ANTHROPIC_MODEL = "claude-sonnet-4-6"
-MAX_TOKENS = 4096
+ANTHROPIC_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-4-6").strip()
+# OpenAI / Gemini defaults when project has no llm_model set (override via env)
+OPENAI_CHAT_MODEL = os.environ.get("OPENAI_CHAT_MODEL", "gpt-4o-mini").strip()
+GEMINI_CHAT_MODEL = os.environ.get("GEMINI_CHAT_MODEL", "gemini-2.0-flash").strip()
+# anthropic | openai | gemini — used when project.llm_provider is null
+DEFAULT_LLM_PROVIDER = os.environ.get("DEFAULT_LLM_PROVIDER", "anthropic").strip().lower()
+MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "4096") or "4096")
+
+# --- Trial & Pro usage (managed keys; see usage_entitlements.py + chat_token_estimate.py) ---
+#
+# Quotas are **billable units**, not raw provider tokens:
+#   billable = input_tokens + (output_tokens * OUTPUT_TOKEN_QUOTA_MULTIPLIER)
+# Output is weighted because list pricing is usually much higher $/token for output than input.
+# Set multiplier ≈ (your output $/MTok) / (your input $/MTok) for your primary Pro model, e.g. ~3–5.
+#
+# Rough COGS sanity (planning only — verify current vendor list prices):
+#   implied_monthly_cogs_usd ≈ (PRO_INCLUDED_TOKENS_PER_MONTH / 1e6) * blended_usd_per_million_billable
+# Example: 3M billable units at ~$8/M blended → ~$24 COGS/month before overage.
+#
+TRIAL_MAX_DAYS = int(os.environ.get("TRIAL_MAX_DAYS", "14") or "14")
+TRIAL_MAX_TOKENS = int(os.environ.get("TRIAL_MAX_TOKENS", "500000") or "500000")
+PRO_INCLUDED_TOKENS_PER_MONTH = int(
+    os.environ.get("PRO_INCLUDED_TOKENS_PER_MONTH", "2000000") or "2000000"
+)
+# Each output token counts this many times toward trial/pro caps (input tokens count as 1×).
+OUTPUT_TOKEN_QUOTA_MULTIPLIER = float(os.environ.get("OUTPUT_TOKEN_QUOTA_MULTIPLIER", "3.0") or "3.0")
+# Comma-separated emails that bypass all token quotas (admin accounts).
+ADMIN_EMAILS: frozenset[str] = frozenset(
+    e.strip().lower() for e in os.environ.get("ADMIN_EMAILS", "").split(",") if e.strip()
+)
+# Optional: shown in 402 responses and GET /api/account/entitlements (Stripe checkout or marketing URL)
+UPGRADE_CHECKOUT_URL = os.environ.get("UPGRADE_CHECKOUT_URL", "").strip() or None
 MAX_UPLOAD_SIZE_MB = 20
 MAX_UPLOAD_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
@@ -167,6 +197,48 @@ GOOGLE_REDIRECT_URI = os.environ.get(
 FRONTEND_ORIGIN = _normalize_browser_origin(
     os.environ.get("FRONTEND_ORIGIN", "http://localhost:5173")
 )
+
+
+def _origin_from_absolute_url(url: str) -> str | None:
+    from urllib.parse import urlparse
+
+    u = urlparse(url.strip())
+    if not u.scheme or not u.netloc:
+        return None
+    return _normalize_browser_origin(f"{u.scheme}://{u.netloc}")
+
+
+def _hostname_is_local_dev(hostname: str | None) -> bool:
+    if not hostname:
+        return False
+    return hostname.lower() in ("localhost", "127.0.0.1", "[::1]")
+
+
+def _post_google_oauth_browser_redirect_origin() -> str:
+    """Browser URL after Google OAuth completes.
+
+    The session cookie is always tied to the host that served ``GOOGLE_REDIRECT_URI``
+    (e.g. Vite on localhost:5173 with ``/api`` proxied). If ``FRONTEND_ORIGIN`` in
+    ``.env`` is set to production (Vercel) for deploy docs, redirecting there after
+    local OAuth drops the localhost cookie and looks like a failed login.
+
+    When the redirect URI is clearly local dev, send the user back to that origin.
+    Otherwise keep ``FRONTEND_ORIGIN`` so API-on-a-subdomain + SPA-on-Vercel still works.
+    """
+    ru_origin = _origin_from_absolute_url(GOOGLE_REDIRECT_URI)
+    if not ru_origin:
+        return FRONTEND_ORIGIN
+    if ru_origin == FRONTEND_ORIGIN:
+        return FRONTEND_ORIGIN
+    from urllib.parse import urlparse
+
+    host = urlparse(GOOGLE_REDIRECT_URI.strip()).hostname
+    if _hostname_is_local_dev(host):
+        return ru_origin
+    return FRONTEND_ORIGIN
+
+
+POST_GOOGLE_OAUTH_FRONTEND_ORIGIN = _post_google_oauth_browser_redirect_origin()
 
 # Web OAuth (production) — if set, used instead of ~/.kova/credentials.json
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip() or None

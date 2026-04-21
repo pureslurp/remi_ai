@@ -52,18 +52,18 @@ const seller: CopyCore = {
 const buyerSeller: CopyCore = {
   transactionsSectionTitle: 'Buying & selling',
   transactionsSubtitle:
-    'Track purchase deals and their sale in one list — use the address and notes to tell buying vs selling apart.',
+    'Same layout as Seller-only + Buyer-only: one listing with buyer offers on it, plus a row per home they may buy.',
   agentNotesPlaceholder:
     'Agent notes (bridge timing, contingent sale, both closings, lender on buy side…)',
-  newPropertyAddressPlaceholder: 'Property address (purchase target or listing)',
-  newOfferPricePlaceholder: 'Offer / list context price (e.g. 415000)',
+  newPropertyAddressPlaceholder: 'Address of a home they may buy',
+  newOfferPricePlaceholder: 'Their offer price (e.g. 415000)',
   emptyActiveTransactions:
-    'No active transactions. Add rows for homes they are buying and for offers on the home they are selling.',
+    'No active purchase deals yet. Add a property when they start looking or go under contract.',
   propertyContextLabel: 'Property',
   transactionNotesPlaceholder:
-    'Deal-specific notes — whether this row is their purchase, their sale, or an offer they received…',
+    'Offer stage, inspection, appraisal, lender — anything specific to this purchase…',
   multiOfferSameListingHint:
-    'Multiple rows on the same address — confirm whether each is buy-side or sell-side in notes.',
+    'Multiple buyer offers on the same sale — use notes to tell each buyer apart.',
 }
 
 const byType: Record<ClientType, CopyCore> = {

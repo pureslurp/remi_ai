@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from config import (
     CREDENTIALS_PATH,
     FRONTEND_ORIGIN,
+    POST_GOOGLE_OAUTH_FRONTEND_ORIGIN,
     GOOGLE_CLIENT_ID,
     GOOGLE_CLIENT_SECRET,
     GOOGLE_REDIRECT_URI,
@@ -32,6 +33,7 @@ from deps.auth import require_account
 from deps.session_jwt import create_session_token, decode_session_token
 from models import Account
 from services import google_token_store
+from services.usage_entitlements import default_subscription_tier_for_new_account
 
 logger = logging.getLogger("kova.auth")
 
@@ -174,6 +176,7 @@ def _upsert_account(db: Session, sub: str, email: str | None, name: str | None, 
                 email=email,
                 name=name,
                 picture=picture,
+                subscription_tier=default_subscription_tier_for_new_account(sub),
                 created_at=now,
                 updated_at=now,
             )
@@ -250,6 +253,7 @@ def google_callback(
                     "reason": state_reason,
                     "GOOGLE_REDIRECT_URI": GOOGLE_REDIRECT_URI,
                     "FRONTEND_ORIGIN": FRONTEND_ORIGIN,
+                    "POST_GOOGLE_OAUTH_FRONTEND_ORIGIN": POST_GOOGLE_OAUTH_FRONTEND_ORIGIN,
                     "hint": "GCP 'Authorized redirect URIs' must match GOOGLE_REDIRECT_URI. "
                     "Use Connect Google from the same browser session; if you opened /url on a "
                     "different origin/port than this callback, the state cookie will not match.",
@@ -305,7 +309,9 @@ def google_callback(
 
     if not is_postgres():
         google_token_store.save_credentials_json_for_account(LOCAL_ACCOUNT_ID, raw_json)
-        resp = RedirectResponse(url=f"{FRONTEND_ORIGIN}/?google_connected=1")
+        resp = RedirectResponse(
+            url=f"{POST_GOOGLE_OAUTH_FRONTEND_ORIGIN}/?google_connected=1"
+        )
         tok = create_session_token(LOCAL_ACCOUNT_ID)
         resp.set_cookie(
             SESSION_COOKIE_NAME,
@@ -363,7 +369,9 @@ def google_callback(
             )
         raise HTTPException(500, "Could not store Google credentials.") from exc
 
-    resp = RedirectResponse(url=f"{FRONTEND_ORIGIN}/?google_connected=1")
+    resp = RedirectResponse(
+        url=f"{POST_GOOGLE_OAUTH_FRONTEND_ORIGIN}/?google_connected=1"
+    )
     try:
         session_tok = create_session_token(sub)
     except RuntimeError as exc:
@@ -465,6 +473,7 @@ def google_oauth_diagnostics():
     base = {
         "GOOGLE_REDIRECT_URI": GOOGLE_REDIRECT_URI,
         "FRONTEND_ORIGIN": FRONTEND_ORIGIN,
+        "POST_GOOGLE_OAUTH_FRONTEND_ORIGIN": POST_GOOGLE_OAUTH_FRONTEND_ORIGIN,
         "is_postgres": is_postgres(),
         "has_SESSION_SECRET": bool(SESSION_SECRET),
         "credentials_file": str(CREDENTIALS_PATH),

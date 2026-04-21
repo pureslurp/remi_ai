@@ -1,32 +1,109 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, useCallback } from 'react'
 import { useAppStore } from '../store/appStore'
 import { useChat } from '../hooks/useChat'
+import * as api from '../api/client'
 import ChatMessageBubble from './ChatMessage'
-import type { ChatMessage } from '../types'
+import type { AccountEntitlements, ChatMessage, LlmOptionsResponse, Project } from '../types'
 
 interface Props {
-  projectId: string
-  projectName: string
+  project: Pick<Project, 'id' | 'name' | 'llm_provider' | 'llm_model'>
+  onProjectUpdated: (p: Project) => void
 }
 
-export default function ChatPanel({ projectId, projectName }: Props) {
+function usageCaption(e: AccountEntitlements): { line: string } {
+  if (e.subscription_tier === 'pro') {
+    const cap = e.pro_included_tokens_per_month
+    return {
+      line: `${e.pro_tokens_remaining.toLocaleString()} / ${cap.toLocaleString()} billable units left this month`,
+    }
+  }
+  const cap = e.trial_max_tokens
+  return {
+    line: `${e.trial_tokens_remaining.toLocaleString()} / ${cap.toLocaleString()} trial units left`,
+  }
+}
+
+export default function ChatPanel({ project, onProjectUpdated }: Props) {
+  const projectId = project.id
+  const projectName = project.name
   const { messages, isStreaming, streamingContent } = useAppStore()
   const { sendMessage, cancelStream } = useChat(projectId)
   const [input, setInput] = useState('')
+  const [llmOpts, setLlmOpts] = useState<LlmOptionsResponse | null>(null)
+  const [llmLoading, setLlmLoading] = useState(true)
+  const [llmSaving, setLlmSaving] = useState(false)
+  const [entitlements, setEntitlements] = useState<AccountEntitlements | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const refreshEntitlements = useCallback(() => {
+    void api.getAccountEntitlements().then(setEntitlements).catch(() => setEntitlements(null))
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    setLlmLoading(true)
+    ;(async () => {
+      try {
+        const o = await api.getLlmOptions()
+        if (!cancelled) setLlmOpts(o)
+      } catch {
+        if (!cancelled) setLlmOpts(null)
+      } finally {
+        if (!cancelled) setLlmLoading(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [projectId, project.llm_provider, project.llm_model])
+
+  useEffect(() => {
+    refreshEntitlements()
+  }, [projectId, refreshEntitlements])
+
+  const usageCaptionText = entitlements ? usageCaption(entitlements) : null
+  const canSendChat = entitlements == null || entitlements.can_send_chat
+  const activeProviderId = (() => {
+    if (!llmOpts?.providers?.length) {
+      return project.llm_provider || llmOpts?.default_provider || ''
+    }
+    const pref = project.llm_provider || llmOpts.default_provider
+    return llmOpts.providers.some(p => p.id === pref) ? pref : llmOpts.default_provider
+  })()
+  const activeProv = llmOpts?.providers.find(p => p.id === activeProviderId) || llmOpts?.providers[0]
+  const modelIds = new Set((activeProv?.models ?? []).map(m => m.id))
+  const activeModelId =
+    project.llm_model && modelIds.has(project.llm_model)
+      ? project.llm_model
+      : activeProv?.models[0]?.id || ''
+  const modelSelectDisabled =
+    llmLoading || !llmOpts?.providers.length || isStreaming || llmSaving || !canSendChat
+
+  const persistLlm = async (fields: Partial<Pick<Project, 'llm_provider' | 'llm_model'>>) => {
+    setLlmSaving(true)
+    try {
+      const updated = await api.updateProject(projectId, fields)
+      onProjectUpdated(updated)
+    } catch {
+      /* keep previous project; errors surface via network / server */
+    } finally {
+      setLlmSaving(false)
+    }
+  }
 
   useEffect(() => {
     // 'auto' = jump to bottom with no scroll animation (smooth looked jarring when switching clients).
     bottomRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' })
   }, [projectId, messages, streamingContent])
 
-  const handleSend = () => {
+  const handleSend = async () => {
     const text = input.trim()
-    if (!text || isStreaming) return
+    if (!text || isStreaming || !canSendChat) return
     setInput('')
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
-    sendMessage(text)
+    await sendMessage(text)
+    refreshEntitlements()
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -51,6 +128,24 @@ export default function ChatPanel({ projectId, projectName }: Props) {
       <div className="px-6 py-4 border-b border-white/5 bg-black/20">
         <h2 className="font-semibold text-brand-cloud tracking-tight">{projectName}</h2>
         <p className="text-[11px] uppercase tracking-[0.15em] text-brand-cloud/40 mt-0.5">Kova Assistant</p>
+        {entitlements && !entitlements.can_send_chat && (
+          <p className="mt-2 text-[11px] text-amber-200/90 leading-relaxed">
+            You’ve reached your token allowance for now. Upgrade to Pro or add usage to keep chatting.
+            {entitlements.upgrade_url ? (
+              <>
+                {' '}
+                <a
+                  href={entitlements.upgrade_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-brand-mint underline-offset-2 hover:underline"
+                >
+                  Open billing
+                </a>
+              </>
+            ) : null}
+          </p>
+        )}
       </div>
 
       <div className="flex-1 overflow-y-auto px-6 py-4">
@@ -88,17 +183,17 @@ export default function ChatPanel({ projectId, projectName }: Props) {
         <div ref={bottomRef} />
       </div>
 
-      <div className="px-4 py-3 border-t border-white/5 bg-black/20">
+      <div className="px-4 pt-3 pb-2 border-t border-white/5 bg-black/20">
         <div className="flex items-end gap-2 bg-white/[0.04] backdrop-blur-sm border border-white/10 rounded-xl px-3 py-2 focus-within:border-brand-mint/40 transition">
           <textarea
             ref={textareaRef}
             value={input}
             onChange={handleInput}
             onKeyDown={handleKeyDown}
-            disabled={isStreaming}
+            disabled={isStreaming || !canSendChat}
             placeholder="Ask Kova about this client… (Enter to send, Shift+Enter for newline)"
             rows={1}
-            className="flex-1 bg-transparent resize-none outline-none text-sm text-brand-cloud placeholder-brand-cloud/35 py-1 max-h-[150px]"
+            className="flex-1 bg-transparent resize-none outline-none text-sm text-brand-cloud placeholder-brand-cloud/35 py-1 max-h-[150px] disabled:opacity-50"
           />
           {isStreaming ? (
             <button
@@ -110,8 +205,8 @@ export default function ChatPanel({ projectId, projectName }: Props) {
             </button>
           ) : (
             <button
-              onClick={handleSend}
-              disabled={!input.trim()}
+              onClick={() => void handleSend()}
+              disabled={!input.trim() || !canSendChat}
               className="shrink-0 w-8 h-8 rounded-lg bg-brand-mint hover:bg-brand-mint/90 flex items-center justify-center transition disabled:opacity-40 disabled:bg-white/10"
               title="Send"
             >
@@ -120,6 +215,76 @@ export default function ChatPanel({ projectId, projectName }: Props) {
               </svg>
             </button>
           )}
+        </div>
+        <div className="mt-1.5 mb-1 px-1 flex flex-col gap-1.5">
+          <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3 min-w-0">
+            {!llmLoading && llmOpts && llmOpts.providers.length > 0 ? (
+              <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                <label className="sr-only" htmlFor={`chat-llm-provider-${projectId}`}>
+                  Provider
+                </label>
+                <select
+                  id={`chat-llm-provider-${projectId}`}
+                  disabled={modelSelectDisabled}
+                  value={activeProviderId}
+                  onChange={e => {
+                    const pid = e.target.value
+                    const p = llmOpts.providers.find(x => x.id === pid)
+                    const mid = p?.models[0]?.id
+                    if (p && mid) void persistLlm({ llm_provider: pid, llm_model: mid })
+                  }}
+                  className="max-w-[min(100%,11rem)] h-7 rounded-md bg-white/[0.04] border border-white/10 px-2 text-[11px] text-brand-cloud/75 outline-none focus:border-brand-mint/35 focus:ring-1 focus:ring-brand-mint/25 disabled:opacity-45"
+                >
+                  {llmOpts.providers.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.label}
+                    </option>
+                  ))}
+                </select>
+                <label className="sr-only" htmlFor={`chat-llm-model-${projectId}`}>
+                  Model
+                </label>
+                <select
+                  id={`chat-llm-model-${projectId}`}
+                  disabled={modelSelectDisabled}
+                  value={activeModelId}
+                  onChange={e => {
+                    void persistLlm({
+                      llm_provider: activeProviderId,
+                      llm_model: e.target.value,
+                    })
+                  }}
+                  className="min-w-0 flex-1 sm:max-w-[min(100%,16rem)] h-7 rounded-md bg-white/[0.04] border border-white/10 px-2 text-[11px] text-brand-cloud/75 outline-none focus:border-brand-mint/35 focus:ring-1 focus:ring-brand-mint/25 disabled:opacity-45"
+                >
+                  {(activeProv?.models ?? []).map(m => (
+                    <option key={m.id} value={m.id}>
+                      {m.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            ) : llmLoading ? (
+              <p className="text-[10px] text-brand-cloud/25">Loading models…</p>
+            ) : (
+              <p className="text-[10px] text-brand-cloud/25">No assistant models configured on the server.</p>
+            )}
+
+            {usageCaptionText && (
+              <p className="flex flex-wrap items-baseline justify-end gap-x-2 gap-y-0.5 text-[10px] leading-relaxed text-brand-cloud/28 sm:text-right sm:min-w-0 sm:max-w-[55%]">
+                <span className="min-w-0">{usageCaptionText.line}</span>
+                {entitlements?.upgrade_url ? (
+                  <a
+                    href={entitlements.upgrade_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="shrink-0 text-brand-cloud/45 hover:text-brand-cloud/65 transition-colors underline-offset-[3px] hover:underline"
+                  >
+                    Upgrade
+                  </a>
+                ) : null}
+              </p>
+            )}
+          </div>
         </div>
       </div>
     </div>

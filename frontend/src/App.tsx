@@ -4,7 +4,7 @@ import * as api from './api/client'
 import Sidebar from './components/Sidebar'
 import ChatPanel from './components/ChatPanel'
 import ClientSettings from './components/ClientSettings'
-import LoginScreen from './components/LoginScreen'
+import LandingPage from './components/LandingPage'
 import ResizableDivider from './components/ResizableDivider'
 import { useProjectData } from './hooks/useProject'
 import type { Project } from './types'
@@ -210,7 +210,7 @@ export default function App() {
   }
 
   if (!sessionUnlocked) {
-    return <LoginScreen />
+    return <LandingPage />
   }
 
   return (
@@ -253,7 +253,7 @@ export default function App() {
         {activeProject ? (
           <>
             <div className="flex-1 min-w-[260px] min-h-0 flex flex-col overflow-hidden border-x border-white/5">
-              <ChatPanel projectId={activeProject.id} projectName={activeProject.name} />
+              <ChatPanel project={activeProject} onProjectUpdated={handleProjectUpdated} />
             </div>
 
             <ResizableDivider onDrag={onRightPanelDrag} onDragEnd={persistLayout} />

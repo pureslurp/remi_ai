@@ -28,6 +28,9 @@ class ProjectUpdate(BaseModel):
     drive_folder_name: Optional[str] = None
     gmail_keywords: Optional[List[str]] = None
     gmail_address_rules: Optional[Dict[str, GmailAddressRule]] = None
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+    sale_property_id: Optional[str] = None
 
 
 class ProjectOut(BaseModel):
@@ -43,6 +46,9 @@ class ProjectOut(BaseModel):
     gmail_address_rules: Optional[Dict[str, GmailAddressRule]] = Field(default_factory=dict)
     last_gmail_sync: Optional[datetime]
     last_drive_sync: Optional[datetime]
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+    sale_property_id: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime]
 

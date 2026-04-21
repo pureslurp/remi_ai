@@ -3,14 +3,29 @@ import { API_ROOT } from '../api/client'
 import { useAppStore } from '../store/appStore'
 import type { ChatMessage } from '../types'
 
+type QuotaDetail = {
+  message?: string
+  instruction?: string
+  upgrade_url?: string | null
+}
+
+function quotaAssistantMarkdown(detail: QuotaDetail): string {
+  const title = '### Plan limit reached\n\n'
+  const body = [detail.message, detail.instruction].filter(Boolean).join('\n\n')
+  const link =
+    detail.upgrade_url != null && detail.upgrade_url !== ''
+      ? `\n\n[Upgrade or manage billing](${detail.upgrade_url})`
+      : ''
+  return title + body + link
+}
+
 export function useChat(projectId: string | null) {
-  const { setIsStreaming, setStreamingContent, addMessage, setMessages, messages } = useAppStore()
+  const { setIsStreaming, setStreamingContent, addMessage } = useAppStore()
   const abortRef = useRef<AbortController | null>(null)
 
-  const sendMessage = async (text: string) => {
-    if (!projectId || !text.trim()) return
+  const sendMessage = async (text: string): Promise<boolean> => {
+    if (!projectId || !text.trim()) return false
 
-    // Optimistically add user message
     const userMsg: ChatMessage = {
       id: crypto.randomUUID(),
       project_id: projectId,
@@ -34,7 +49,44 @@ export function useChat(projectId: string | null) {
         signal: abortRef.current.signal,
       })
 
-      if (!res.ok) throw new Error(`${res.status}`)
+      if (res.status === 402) {
+        let detail: QuotaDetail = {}
+        try {
+          const j = (await res.json()) as { detail?: unknown }
+          const d = j.detail
+          if (d && typeof d === 'object' && !Array.isArray(d)) {
+            detail = d as QuotaDetail
+          }
+        } catch {
+          /* ignore */
+        }
+        addMessage({
+          id: crypto.randomUUID(),
+          project_id: projectId,
+          role: 'assistant',
+          content: quotaAssistantMarkdown(detail),
+          created_at: new Date().toISOString(),
+        })
+        return false
+      }
+
+      if (!res.ok) {
+        let msg = `Request failed (${res.status})`
+        try {
+          const j = (await res.json()) as { detail?: unknown }
+          const d = j.detail
+          if (typeof d === 'string') msg = d
+          else if (d && typeof d === 'object' && 'message' in d) {
+            const m = (d as { message?: string }).message
+            const url = (d as { upgrade_url?: string | null }).upgrade_url
+            msg = m || msg
+            if (url) msg = `${msg} ${url}`
+          }
+        } catch {
+          /* ignore */
+        }
+        throw new Error(msg)
+      }
       if (!res.body) throw new Error('No response body')
 
       const reader = res.body.getReader()
@@ -44,7 +96,6 @@ export function useChat(projectId: string | null) {
         const { done, value } = await reader.read()
         if (done) break
         const raw = decoder.decode(value, { stream: true })
-        // Parse SSE lines: "data: <text>\n\n"
         const lines = raw.split('\n')
         for (const line of lines) {
           if (line.startsWith('data: ')) {
@@ -59,13 +110,11 @@ export function useChat(projectId: string | null) {
               setStreamingContent(accumulated)
             } catch (parseErr) {
               if (parseErr instanceof Error && parseErr.message !== raw) throw parseErr
-              // non-JSON line (e.g. keep-alive comment) — ignore
             }
           }
         }
       }
 
-      // Commit final assistant message
       if (accumulated) {
         const assistantMsg: ChatMessage = {
           id: crypto.randomUUID(),
@@ -76,6 +125,7 @@ export function useChat(projectId: string | null) {
         }
         addMessage(assistantMsg)
       }
+      return true
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') {
         if (accumulated) {
@@ -87,16 +137,17 @@ export function useChat(projectId: string | null) {
             created_at: new Date().toISOString(),
           })
         }
-      } else {
-        const msg = err instanceof Error ? err.message : String(err)
-        addMessage({
-          id: crypto.randomUUID(),
-          project_id: projectId,
-          role: 'assistant',
-          content: `⚠️ Error: ${msg}`,
-          created_at: new Date().toISOString(),
-        })
+        return false
       }
+      const msg = err instanceof Error ? err.message : String(err)
+      addMessage({
+        id: crypto.randomUUID(),
+        project_id: projectId,
+        role: 'assistant',
+        content: `⚠️ Error: ${msg}`,
+        created_at: new Date().toISOString(),
+      })
+      return false
     } finally {
       setIsStreaming(false)
       setStreamingContent('')

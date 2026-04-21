@@ -1,13 +1,15 @@
 from typing import List
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from database import get_db
 from deps.auth import require_account
 from deps.project_access import ProjectForUser
-from models import Project
+from models import Account, Project, Property
 from schemas.project import ProjectCreate, ProjectUpdate, ProjectOut
+from services.llm_config import normalize_project_llm_for_account
+from services.usage_entitlements import subscription_tier
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -41,8 +43,28 @@ def get_project(project: ProjectForUser):
 
 
 @router.put("/{project_id}", response_model=ProjectOut)
-def update_project(project: ProjectForUser, body: ProjectUpdate, db: Session = Depends(get_db)):
-    for key, value in body.model_dump(exclude_unset=True).items():
+def update_project(
+    project: ProjectForUser,
+    body: ProjectUpdate,
+    db: Session = Depends(get_db),
+    account_id: str = Depends(require_account),
+):
+    data = body.model_dump(exclude_unset=True)
+    acc = db.get(Account, account_id)
+    tier = subscription_tier(acc) if acc else "trial"
+    if "llm_provider" in data or "llm_model" in data:
+        lp = data.get("llm_provider", project.llm_provider)
+        lm = data.get("llm_model", project.llm_model)
+        np, nm = normalize_project_llm_for_account(lp, lm, tier)
+        data["llm_provider"] = np
+        data["llm_model"] = nm
+    if "sale_property_id" in data:
+        spid = data["sale_property_id"]
+        if spid is not None:
+            prop = db.get(Property, spid)
+            if not prop or prop.project_id != project.id:
+                raise HTTPException(status_code=400, detail="sale_property_id must belong to this project")
+    for key, value in data.items():
         setattr(project, key, value)
     db.commit()
     db.refresh(project)
