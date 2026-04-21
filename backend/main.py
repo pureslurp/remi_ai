@@ -119,6 +119,37 @@ def _bootstrap_sqlite() -> None:
                 if "system_prompt_buyer_seller" not in acols:
                     conn.execute(text("ALTER TABLE accounts ADD COLUMN system_prompt_buyer_seller TEXT"))
                     conn.commit()
+                if "subscription_tier" not in acols:
+                    conn.execute(
+                        text("ALTER TABLE accounts ADD COLUMN subscription_tier VARCHAR DEFAULT 'pro'")
+                    )
+                    conn.commit()
+                if "trial_started_at" not in acols:
+                    conn.execute(text("ALTER TABLE accounts ADD COLUMN trial_started_at DATETIME"))
+                    conn.commit()
+                if "trial_messages_used" not in acols:
+                    conn.execute(
+                        text("ALTER TABLE accounts ADD COLUMN trial_messages_used INTEGER DEFAULT 0")
+                    )
+                    conn.commit()
+                if "pro_billing_month" not in acols:
+                    conn.execute(text("ALTER TABLE accounts ADD COLUMN pro_billing_month VARCHAR"))
+                    conn.commit()
+                if "pro_messages_used" not in acols:
+                    conn.execute(
+                        text("ALTER TABLE accounts ADD COLUMN pro_messages_used INTEGER DEFAULT 0")
+                    )
+                    conn.commit()
+                if "trial_tokens_used" not in acols:
+                    conn.execute(
+                        text("ALTER TABLE accounts ADD COLUMN trial_tokens_used INTEGER DEFAULT 0")
+                    )
+                    conn.commit()
+                if "pro_tokens_used" not in acols:
+                    conn.execute(
+                        text("ALTER TABLE accounts ADD COLUMN pro_tokens_used INTEGER DEFAULT 0")
+                    )
+                    conn.commit()
             acols = {row[1] for row in conn.execute(text("PRAGMA table_info(projects)")).fetchall()}
             if acols and "owner_id" not in acols:
                 conn.execute(text("ALTER TABLE projects ADD COLUMN owner_id VARCHAR"))
@@ -132,6 +163,23 @@ def _bootstrap_sqlite() -> None:
             conn.commit()
             conn.execute(text("UPDATE projects SET owner_id = 'local' WHERE owner_id IS NULL"))
             conn.commit()
+            try:
+                conn.execute(
+                    text("UPDATE accounts SET subscription_tier = 'pro' WHERE id = 'local'")
+                )
+                conn.commit()
+            except Exception:
+                conn.rollback()
+            pcols = {row[1] for row in conn.execute(text("PRAGMA table_info(projects)")).fetchall()}
+            if pcols and "llm_provider" not in pcols:
+                conn.execute(text("ALTER TABLE projects ADD COLUMN llm_provider VARCHAR"))
+                conn.commit()
+            if pcols and "llm_model" not in pcols:
+                conn.execute(text("ALTER TABLE projects ADD COLUMN llm_model VARCHAR"))
+                conn.commit()
+            if pcols and "sale_property_id" not in pcols:
+                conn.execute(text("ALTER TABLE projects ADD COLUMN sale_property_id VARCHAR"))
+                conn.commit()
             try:
                 conn.execute(
                     text("UPDATE google_oauth_credentials SET id = 'local' WHERE id = 'default'")
@@ -160,7 +208,7 @@ if is_postgres():
 else:
     _bootstrap_sqlite()
 
-from routers import account, projects, properties, transactions, documents, chat, auth, gmail, drive
+from routers import account, projects, properties, transactions, documents, chat, auth, gmail, drive, llm
 
 
 class ApiNoCacheMiddleware:
@@ -232,6 +280,7 @@ if is_postgres() and GOOGLE_CLIENT_ID and not os.environ.get("FRONTEND_ORIGIN", 
     )
 
 app.include_router(account.router)
+app.include_router(llm.router)
 app.include_router(projects.router)
 app.include_router(properties.router)
 app.include_router(transactions.router)

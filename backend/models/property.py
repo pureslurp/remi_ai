@@ -21,5 +21,5 @@ class Property(Base):
     status = Column(String, default="active")  # active|pending|contingent|closed|dead
     notes = Column(Text)
 
-    project = relationship("Project", back_populates="properties")
+    project = relationship("Project", back_populates="properties", foreign_keys="[Property.project_id]")
     transactions = relationship("Transaction", back_populates="property", cascade="all, delete-orphan")

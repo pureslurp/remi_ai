@@ -22,6 +22,11 @@ class Project(Base):
     gmail_address_rules = Column(JSON, default=dict)  # per-address optional keywords + after_date
     last_gmail_sync = Column(DateTime)
     last_drive_sync = Column(DateTime)
+    # Per-workspace LLM preference (nullable = server defaults from env at chat time)
+    llm_provider = Column(String, nullable=True)
+    llm_model = Column(String, nullable=True)
+    # For client_type "buyer & seller": which single property is the home they are selling
+    sale_property_id = Column(String, ForeignKey("properties.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -30,5 +35,5 @@ class Project(Base):
     messages = relationship("ChatMessage", back_populates="project", cascade="all, delete-orphan")
     documents = relationship("Document", back_populates="project", cascade="all, delete-orphan")
     email_threads = relationship("EmailThread", back_populates="project", cascade="all, delete-orphan")
-    properties = relationship("Property", back_populates="project", cascade="all, delete-orphan")
+    properties = relationship("Property", back_populates="project", cascade="all, delete-orphan", foreign_keys="[Property.project_id]")
     transactions = relationship("Transaction", back_populates="project", cascade="all, delete-orphan")

@@ -18,8 +18,43 @@ export interface Project {
   gmail_address_rules?: Record<string, GmailAddressRule>
   last_gmail_sync?: string
   last_drive_sync?: string
+  /** anthropic | openai | gemini — server validates against tier + configured keys */
+  llm_provider?: string | null
+  llm_model?: string | null
+  /** When client_type is "buyer & seller", the single listing they are selling */
+  sale_property_id?: string | null
   created_at: string
   updated_at?: string
+}
+
+export type LlmOptionProvider = {
+  id: string
+  label: string
+  models: { id: string; label: string }[]
+}
+
+export type LlmOptionsResponse = {
+  providers: LlmOptionProvider[]
+  default_provider: string
+  subscription_tier?: string
+}
+
+export type AccountEntitlements = {
+  subscription_tier: 'trial' | 'pro'
+  trial_max_tokens: number
+  trial_tokens_used: number
+  trial_tokens_remaining: number
+  trial_max_days: number
+  trial_started_at: string | null
+  trial_ends_at: string | null
+  pro_included_tokens_per_month: number
+  pro_tokens_used: number
+  pro_tokens_remaining: number
+  pro_billing_month: string | null
+  can_send_chat: boolean
+  upgrade_url: string | null
+  /** Output tokens count this many times toward caps (input = 1×). */
+  quota_output_multiplier?: number
 }
 
 export interface Property {

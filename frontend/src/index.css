@@ -45,3 +45,25 @@ body {
 .kova-fade-in {
   animation: kova-fade-in 320ms ease-out both;
 }
+
+/* Marketing landing — staggered hero reveals */
+@keyframes landing-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.landing-rise {
+  animation: landing-rise 0.65s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .landing-rise {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}

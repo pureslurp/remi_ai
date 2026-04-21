@@ -1,4 +1,14 @@
-import type { Project, Property, Transaction, KeyDate, ChatMessage, Document, EmailThread } from '../types'
+import type {
+  Project,
+  Property,
+  Transaction,
+  KeyDate,
+  ChatMessage,
+  Document,
+  EmailThread,
+  LlmOptionsResponse,
+  AccountEntitlements,
+} from '../types'
 
 const rawBase = (import.meta.env.VITE_API_BASE as string | undefined)?.replace(/\/$/, '') || ''
 export const API_ROOT = rawBase ? `${rawBase}/api` : '/api'
@@ -147,3 +157,7 @@ export type SystemPromptsUpdate = {
 export const getSystemPrompts = () => req<SystemPromptsSettings>('/account/system-prompts')
 export const updateSystemPrompts = (data: SystemPromptsUpdate) =>
   req<SystemPromptsSettings>('/account/system-prompts', { method: 'PUT', body: JSON.stringify(data) })
+
+export const getLlmOptions = () => req<LlmOptionsResponse>('/llm/options')
+
+export const getAccountEntitlements = () => req<AccountEntitlements>('/account/entitlements')
