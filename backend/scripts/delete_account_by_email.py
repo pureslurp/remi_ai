@@ -40,13 +40,11 @@ def delete_account_by_email(db: Session, email: str) -> bool:
         db.delete(p)
     # Flush so rows are removed before we touch accounts (FK: google → accounts)
     db.flush()
-    n_oauth = (
+    (
         db.query(GoogleOAuthCredential)
         .filter(GoogleOAuthCredential.id == acc.id)
         .delete(synchronize_session=False)
     )
-    if n_oauth:
-        pass  # keep variable for possible logging
     db.delete(acc)
     db.commit()
     return True
