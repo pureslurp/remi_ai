@@ -20,7 +20,7 @@ from sqlalchemy import text
 _log_handlers = [logging.StreamHandler()]
 try:
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    _log_handlers.append(logging.FileHandler(LOGS_DIR / "kova.log"))
+    _log_handlers.append(logging.FileHandler(LOGS_DIR / "reco.log"))
 except OSError:
     pass
 
@@ -30,7 +30,7 @@ logging.basicConfig(
     handlers=_log_handlers,
     force=True,
 )
-logger = logging.getLogger("kova")
+logger = logging.getLogger("reco")
 
 from database import engine, Base
 import models  # ensure all ORM models are registered
@@ -249,7 +249,7 @@ class ApiNoCacheMiddleware:
         await self.app(scope, receive, send_wrapper)
 
 
-app = FastAPI(title="Kova", version="1.0.0")
+app = FastAPI(title="Reco", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -301,7 +301,8 @@ def health():
     if not DB_INIT_STATUS.get("ok") and DB_INIT_STATUS.get("error"):
         out["db_init_error"] = DB_INIT_STATUS["error"]
     _debug_flag = (
-        os.environ.get("KOVA_DEBUG", "").strip()
+        os.environ.get("RECO_DEBUG", "").strip()
+        or os.environ.get("KOVA_DEBUG", "").strip()  # legacy
         or os.environ.get("REMIP_DEBUG", "").strip()
     )
     if _debug_flag.lower() in ("1", "true", "yes"):

@@ -1,9 +1,13 @@
+import { useEffect, useRef, useState } from 'react'
+import * as api from '../api/client'
 import { useGoogleOAuthRedirect } from '../hooks/useGoogleOAuthRedirect'
 import LandingAppPreview from './LandingAppPreview'
 
 type Props = {
   /** Reserved: server linked Google but this browser has not completed OAuth. */
   needsDeviceLink?: boolean
+  /** Called after successful email signup/login to re-bootstrap the app. */
+  onEmailAuth?: () => void
 }
 
 function GoogleMark({ className }: { className?: string }) {
@@ -26,6 +30,243 @@ function GoogleMark({ className }: { className?: string }) {
         d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
       />
     </svg>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Auth modal
+// ---------------------------------------------------------------------------
+
+type Plan = 'free' | 'pro' | 'max' | 'ultra'
+
+const PLAN_OPTIONS: { id: Plan; label: string; price: string }[] = [
+  { id: 'free', label: 'Free', price: '$0' },
+  { id: 'pro', label: 'Pro', price: '$20/mo' },
+  { id: 'max', label: 'Max', price: '$60/mo' },
+  { id: 'ultra', label: 'Ultra', price: '$100/mo' },
+]
+
+type AuthModalProps = {
+  mode: 'signup' | 'signin'
+  initialPlan?: Plan
+  onClose: () => void
+  onModeChange: (m: 'signup' | 'signin') => void
+  onEmailAuth?: () => void
+}
+
+function AuthModal({ mode, initialPlan = 'free', onClose, onModeChange, onEmailAuth }: AuthModalProps) {
+  const { busy: googleBusy, startGoogleAuth } = useGoogleOAuthRedirect()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [name, setName] = useState('')
+  const [selectedPlan, setSelectedPlan] = useState<Plan>(initialPlan)
+  const [emailBusy, setEmailBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const overlayRef = useRef<HTMLDivElement>(null)
+  const firstInputRef = useRef<HTMLInputElement>(null)
+
+  // Sync plan if parent changes initialPlan (e.g. user clicks different pricing CTA while modal is open)
+  useEffect(() => { setSelectedPlan(initialPlan) }, [initialPlan])
+
+  const busy = googleBusy || emailBusy
+
+  // Close on Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  // Focus first input on open
+  useEffect(() => {
+    setTimeout(() => firstInputRef.current?.focus(), 50)
+  }, [mode])
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setEmailBusy(true)
+    try {
+      if (mode === 'signup') {
+        await api.signup({ email, password, name: name || undefined })
+      } else {
+        await api.login({ email, password })
+      }
+      onEmailAuth?.()
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err)
+      try {
+        const parsed = JSON.parse(msg.slice(msg.indexOf(':') + 1).trim())
+        setError(parsed.detail || msg)
+      } catch {
+        setError(msg)
+      }
+    } finally {
+      setEmailBusy(false)
+    }
+  }
+
+  return (
+    <div
+      ref={overlayRef}
+      className="fixed inset-0 z-[200] flex items-center justify-center p-4"
+      onClick={e => { if (e.target === overlayRef.current) onClose() }}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="auth-modal-title"
+    >
+      {/* Backdrop */}
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" aria-hidden />
+
+      {/* Panel */}
+      <div className="relative w-full max-w-sm rounded-2xl border border-white/10 bg-gradient-to-b from-[#1c1f2e] to-[#16181f] p-7 shadow-2xl shadow-black/60">
+        {/* Close */}
+        <button
+          type="button"
+          onClick={onClose}
+          className="absolute right-4 top-4 rounded-lg p-1.5 text-brand-cloud/40 hover:text-brand-cloud/80 transition"
+          aria-label="Close"
+        >
+          <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
+        <h2 id="auth-modal-title" className="font-landing-display text-xl font-semibold text-brand-cloud">
+          {mode === 'signup' ? 'Create your account' : 'Welcome back'}
+        </h2>
+        <p className="mt-1 text-sm text-brand-cloud/50">
+          {mode === 'signup' ? 'Start for free — no credit card required.' : 'Sign in to your Reco workspace.'}
+        </p>
+
+        {/* Plan selector — signup only */}
+        {mode === 'signup' && (
+          <div className="mt-5">
+            <p className="mb-2 text-xs font-medium text-brand-cloud/50 uppercase tracking-wider">Plan</p>
+            <div className="grid grid-cols-4 gap-1 rounded-xl border border-white/10 bg-black/25 p-1">
+              {PLAN_OPTIONS.map(plan => {
+                const sel = selectedPlan === plan.id
+                return (
+                  <button
+                    key={plan.id}
+                    type="button"
+                    onClick={() => setSelectedPlan(plan.id)}
+                    className={`flex flex-col items-center rounded-lg px-1 py-2 text-center transition ${
+                      sel
+                        ? 'bg-white/[0.12] text-brand-cloud shadow-sm ring-1 ring-white/15'
+                        : 'text-brand-cloud/50 hover:bg-white/[0.05] hover:text-brand-cloud/80'
+                    }`}
+                  >
+                    <span className="text-xs font-semibold">{plan.label}</span>
+                    <span className={`text-[10px] mt-0.5 ${sel ? 'text-brand-mint/80' : 'text-brand-cloud/35'}`}>{plan.price}</span>
+                  </button>
+                )
+              })}
+            </div>
+            {selectedPlan !== 'free' && (
+              <p className="mt-1.5 text-[11px] text-brand-cloud/40">
+                You&apos;ll set up billing after your account is created.
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Google — recommended */}
+        <button
+          type="button"
+          onClick={startGoogleAuth}
+          disabled={busy}
+          className="mt-5 w-full inline-flex items-center justify-center gap-2.5 rounded-xl bg-white/[0.07] border border-white/15 px-4 py-3 text-sm font-semibold text-brand-cloud transition hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          {googleBusy ? (
+            <>
+              <span className="inline-block h-4 w-4 shrink-0 rounded-full border-2 border-white/25 border-t-brand-cloud animate-spin" />
+              Connecting...
+            </>
+          ) : (
+            <>
+              <GoogleMark className="h-5 w-5 shrink-0" />
+              Continue with Google
+            </>
+          )}
+        </button>
+        <p className="mt-1.5 text-center text-[11px] text-brand-mint/60">
+          Recommended — enables Gmail and Drive sync
+        </p>
+
+        {/* Divider */}
+        <div className="my-5 flex items-center gap-3">
+          <div className="h-px flex-1 bg-white/10" />
+          <span className="text-xs text-brand-cloud/35">or continue with email</span>
+          <div className="h-px flex-1 bg-white/10" />
+        </div>
+
+        {/* Error */}
+        {error && (
+          <div className="mb-4 rounded-lg border border-red-400/30 bg-red-500/10 px-3 py-2 text-sm text-red-100" role="alert">
+            {error}
+          </div>
+        )}
+
+        {/* Email form */}
+        <form onSubmit={handleSubmit} className="space-y-3">
+          {mode === 'signup' && (
+            <input
+              ref={firstInputRef}
+              type="text"
+              placeholder="Name (optional)"
+              value={name}
+              onChange={e => setName(e.target.value)}
+              disabled={busy}
+              className="w-full rounded-xl border border-white/12 bg-white/[0.04] px-4 py-2.5 text-sm text-brand-cloud placeholder:text-brand-cloud/30 outline-none focus:border-white/25 focus:bg-white/[0.07] transition disabled:opacity-50"
+            />
+          )}
+          <input
+            ref={mode === 'signin' ? firstInputRef : undefined}
+            type="email"
+            placeholder="Email"
+            value={email}
+            onChange={e => setEmail(e.target.value)}
+            required
+            disabled={busy}
+            className="w-full rounded-xl border border-white/12 bg-white/[0.04] px-4 py-2.5 text-sm text-brand-cloud placeholder:text-brand-cloud/30 outline-none focus:border-white/25 focus:bg-white/[0.07] transition disabled:opacity-50"
+          />
+          <input
+            type="password"
+            placeholder="Password (8+ characters)"
+            value={password}
+            onChange={e => setPassword(e.target.value)}
+            required
+            minLength={8}
+            disabled={busy}
+            className="w-full rounded-xl border border-white/12 bg-white/[0.04] px-4 py-2.5 text-sm text-brand-cloud placeholder:text-brand-cloud/30 outline-none focus:border-white/25 focus:bg-white/[0.07] transition disabled:opacity-50"
+          />
+          <button
+            type="submit"
+            disabled={busy}
+            className="w-full rounded-xl bg-brand-cloud py-2.5 text-sm font-semibold text-brand-navy shadow-md transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {emailBusy ? 'Please wait...' : mode === 'signup' ? 'Create account' : 'Sign in'}
+          </button>
+        </form>
+
+        <p className="mt-4 text-center text-xs text-brand-cloud/40">
+          {mode === 'signup' ? (
+            <>Already have an account?{' '}
+              <button type="button" onClick={() => onModeChange('signin')} className="text-brand-mint/80 hover:text-brand-mint transition">
+                Sign in
+              </button>
+            </>
+          ) : (
+            <>Need an account?{' '}
+              <button type="button" onClick={() => onModeChange('signup')} className="text-brand-mint/80 hover:text-brand-mint transition">
+                Sign up free
+              </button>
+            </>
+          )}
+        </p>
+      </div>
+    </div>
   )
 }
 
@@ -56,16 +297,71 @@ const FEATURES = [
   },
 ] as const
 
-export default function LandingPage({ needsDeviceLink }: Props) {
-  const { busy, error, startGoogleAuth } = useGoogleOAuthRedirect()
+type IndividualTierId = 'pro' | 'max' | 'ultra'
+
+const INDIVIDUAL_TIERS: Record<
+  IndividualTierId,
+  {
+    label: string
+    price: number
+    bullets: readonly string[]
+    intro: string
+    ctaVariant: 'solid' | 'outline'
+    recommended?: boolean
+  }
+> = {
+  pro: {
+    label: 'Pro',
+    price: 20,
+    intro: 'Everything in Free, plus:',
+    bullets: ['4× more AI usage than Free', 'Advanced AI models', 'Unlimited clients'],
+    ctaVariant: 'outline',
+  },
+  max: {
+    label: 'Max',
+    price: 60,
+    intro: 'Everything in Pro, plus:',
+    bullets: ['3× more AI usage than Pro', 'Frontier models where available', 'Best fit for daily deal volume'],
+    ctaVariant: 'solid',
+    recommended: true,
+  },
+  ultra: {
+    label: 'Ultra',
+    price: 100,
+    intro: 'Everything in Max, plus:',
+    bullets: ['Highest included AI usage', 'Priority access to new capabilities', 'For power users across many clients'],
+    ctaVariant: 'outline',
+  },
+}
+
+const INDIVIDUAL_TIER_ORDER: IndividualTierId[] = ['pro', 'max', 'ultra']
+
+export default function LandingPage({ needsDeviceLink, onEmailAuth }: Props) {
+  const [authModal, setAuthModal] = useState<'signup' | 'signin' | null>(null)
+  const [signupPlan, setSignupPlan] = useState<Plan>('free')
+  const [individualTier, setIndividualTier] = useState<IndividualTierId>('max')
+
+  const openSignup = (plan: Plan = 'free') => { setSignupPlan(plan); setAuthModal('signup') }
+  const openSignin = () => setAuthModal('signin')
+  const closeModal = () => setAuthModal(null)
 
   const salesRaw = import.meta.env.VITE_SALES_EMAIL
   const salesEmail = typeof salesRaw === 'string' ? salesRaw.trim() : ''
-  const enterpriseMailto = salesEmail
-    ? `mailto:${salesEmail}?subject=${encodeURIComponent('Kova — Enterprise / brokerage')}`
+  const brokerageMailto = salesEmail
+    ? `mailto:${salesEmail}?subject=${encodeURIComponent('Reco — Brokerage inquiry')}`
     : null
 
   return (
+    <>
+    {authModal && (
+      <AuthModal
+        mode={authModal}
+        initialPlan={signupPlan}
+        onClose={closeModal}
+        onModeChange={setAuthModal}
+        onEmailAuth={() => { closeModal(); onEmailAuth?.() }}
+      />
+    )}
     <div
       className="fixed inset-0 z-[100] overflow-y-auto overflow-x-hidden font-landing-sans text-brand-cloud/90 antialiased"
       style={{
@@ -88,26 +384,22 @@ export default function LandingPage({ needsDeviceLink }: Props) {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
           <div className="landing-rise flex items-center gap-3" style={{ animationDelay: '0ms' }}>
             <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-gradient-to-br from-brand-navy to-brand-slate shadow-lg shadow-black/25">
-              <span className="font-landing-display text-xl font-semibold tracking-tight text-brand-cloud">K</span>
+              <span className="font-landing-display text-xl font-semibold tracking-tight text-brand-cloud">R</span>
             </div>
-            <span className="font-landing-display text-2xl font-semibold tracking-tight text-brand-cloud">Kova</span>
+            <span className="font-landing-display text-2xl font-semibold tracking-tight text-brand-cloud">Reco</span>
           </div>
           <nav className="landing-rise flex items-center gap-2 sm:gap-3" style={{ animationDelay: '60ms' }} aria-label="Account">
             <button
               type="button"
-              onClick={startGoogleAuth}
-              disabled={busy}
-              aria-label="Sign in with Google"
-              className="rounded-lg border border-white/15 px-3 py-2 text-sm font-medium text-brand-cloud/90 transition hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
+              onClick={openSignin}
+              className="rounded-lg border border-white/15 px-3 py-2 text-sm font-medium text-brand-cloud/90 transition hover:bg-white/[0.06]"
             >
               Sign in
             </button>
             <button
               type="button"
-              onClick={startGoogleAuth}
-              disabled={busy}
-              aria-label="Sign up with Google"
-              className="rounded-lg bg-brand-cloud px-3 py-2 text-sm font-semibold text-brand-navy shadow-md shadow-black/20 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
+              onClick={openSignup}
+              className="rounded-lg bg-brand-cloud px-3 py-2 text-sm font-semibold text-brand-navy shadow-md shadow-black/20 transition hover:bg-white"
             >
               Sign up
             </button>
@@ -146,53 +438,32 @@ export default function LandingPage({ needsDeviceLink }: Props) {
               className="landing-rise mt-6 max-w-xl text-base leading-relaxed text-brand-cloud/65 sm:text-lg"
               style={{ animationDelay: '160ms' }}
             >
-              Kova gives each client their own memory. It answers from your email and synced documents, so you
+              Reco gives each client their own memory. It answers from your email and synced documents, so you
               aren&apos;t explaining the deal from scratch every time you open a chat.
             </p>
-            {error && (
-              <div
-                className="landing-rise mt-6 rounded-xl border border-red-400/30 bg-red-500/10 px-4 py-3 text-left text-sm text-red-100"
-                style={{ animationDelay: '200ms' }}
-                role="alert"
-              >
-                {error}
-              </div>
-            )}
             <div
               className="landing-rise mt-10 flex flex-col gap-3 sm:flex-row sm:items-center"
               style={{ animationDelay: '220ms' }}
             >
               <button
                 type="button"
-                onClick={startGoogleAuth}
-                disabled={busy}
-                className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 bg-white/[0.03] px-6 py-3.5 text-sm font-semibold text-brand-cloud backdrop-blur-sm transition hover:border-white/30 hover:bg-white/[0.06] disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
+                onClick={openSignup}
+                className="inline-flex items-center justify-center rounded-xl bg-brand-cloud px-6 py-3.5 text-sm font-semibold text-brand-navy shadow-lg shadow-black/25 transition hover:bg-white motion-reduce:transition-none"
               >
-                {busy ? (
-                  <>
-                    <span className="inline-block h-4 w-4 shrink-0 rounded-full border-2 border-white/25 border-t-brand-cloud motion-reduce:animate-none animate-spin" />
-                    Connecting…
-                  </>
-                ) : (
-                  <>
-                    <GoogleMark className="h-5 w-5 shrink-0 text-brand-cloud/90" />
-                    Sign in with Google
-                  </>
-                )}
+                Get started free
               </button>
-              <button
-                type="button"
-                onClick={startGoogleAuth}
-                disabled={busy}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand-cloud px-6 py-3.5 text-sm font-semibold text-brand-navy shadow-lg shadow-black/25 transition hover:bg-white disabled:cursor-not-allowed disabled:opacity-50 motion-reduce:transition-none"
+              <a
+                href="#pricing-heading"
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/15 px-6 py-3.5 text-sm font-medium text-brand-cloud/80 transition hover:border-white/25 hover:text-brand-cloud motion-reduce:transition-none"
               >
-                <GoogleMark className="h-5 w-5 shrink-0" />
-                Sign up with Google
-              </button>
+                See plans
+                <svg className="w-3.5 h-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </a>
             </div>
-            <p className="landing-rise mt-4 max-w-md text-xs leading-relaxed text-brand-cloud/45" style={{ animationDelay: '280ms' }}>
-              New or returning, it&apos;s the same Google sign-in. Email and document sync are optional, and only needed if
-              you want Kova to pull things in for you.
+            <p className="landing-rise mt-4 text-xs text-brand-cloud/40" style={{ animationDelay: '280ms' }}>
+              Free plan available · No credit card required
             </p>
           </div>
 
@@ -245,13 +516,14 @@ export default function LandingPage({ needsDeviceLink }: Props) {
 
         <section className="mt-24 sm:mt-28" aria-labelledby="pricing-heading">
           <h2 id="pricing-heading" className="font-landing-display text-3xl font-semibold tracking-tight text-brand-cloud sm:text-4xl">
-            Simple pricing
+            Pricing
           </h2>
           <p className="mt-3 max-w-2xl text-brand-cloud/55">
             Start free, no credit card required. AI is included — no API keys to manage.
           </p>
-          <ul className="mt-10 grid gap-6 lg:grid-cols-3">
-            <li className="flex flex-col rounded-2xl border border-white/[0.08] bg-white/[0.02] p-7">
+
+          <div className="mt-10 grid gap-6 lg:grid-cols-3">
+            <article className="flex flex-col rounded-2xl border border-white/[0.08] bg-white/[0.02] p-7">
               <h3 className="font-landing-display text-2xl font-semibold text-brand-cloud">Free</h3>
               <p className="mt-1 text-3xl font-semibold tracking-tight text-brand-cloud">$0</p>
               <p className="mt-1 text-xs text-brand-cloud/40">No credit card needed</p>
@@ -263,48 +535,114 @@ export default function LandingPage({ needsDeviceLink }: Props) {
               </ul>
               <button
                 type="button"
-                onClick={startGoogleAuth}
-                disabled={busy}
-                className="mt-8 w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-brand-cloud transition hover:bg-white/[0.06] disabled:opacity-50"
+                onClick={() => openSignup('free')}
+                className="mt-8 w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-brand-cloud transition hover:bg-white/[0.06]"
               >
                 Start for free
               </button>
-            </li>
-            <li className="relative flex flex-col rounded-2xl border border-brand-mint/35 bg-gradient-to-b from-brand-mint/10 to-transparent p-7 shadow-lg shadow-brand-mint/5 ring-1 ring-brand-mint/20">
-              <span className="absolute right-5 top-5 rounded-full bg-brand-mint/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-mint">
-                Most popular
-              </span>
-              <h3 className="font-landing-display text-2xl font-semibold text-brand-cloud">Pro</h3>
-              <p className="mt-1 text-3xl font-semibold tracking-tight text-brand-cloud">
-                $20<span className="text-base font-normal text-brand-cloud/50">/mo</span>
-              </p>
-              <p className="mt-1 text-xs text-brand-cloud/40">Billed monthly, cancel anytime</p>
-              <ul className="mt-6 flex-1 space-y-2 text-sm text-brand-cloud/70">
-                <li>Everything in Free, plus:</li>
-                <li>4× more AI usage</li>
-                <li>Advanced AI models</li>
-                <li>Unlimited clients</li>
-              </ul>
-              <button
-                type="button"
-                onClick={startGoogleAuth}
-                disabled={busy}
-                className="mt-8 w-full rounded-xl bg-brand-cloud py-3 text-sm font-semibold text-brand-navy shadow-md transition hover:bg-white disabled:opacity-50"
+            </article>
+
+            <article
+              className={`relative flex flex-col rounded-2xl p-7 transition-colors motion-reduce:transition-none ${
+                individualTier === 'max'
+                  ? 'border border-brand-mint/35 bg-gradient-to-b from-brand-mint/10 to-transparent shadow-lg shadow-brand-mint/5 ring-1 ring-brand-mint/20'
+                  : 'border border-white/[0.08] bg-white/[0.02]'
+              }`}
+              aria-labelledby="individual-plans-heading"
+            >
+              {INDIVIDUAL_TIERS[individualTier].recommended && (
+                <span className="absolute right-5 top-5 rounded-full bg-brand-mint/20 px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider text-brand-mint">
+                  Most popular
+                </span>
+              )}
+              <h3
+                id="individual-plans-heading"
+                className="font-landing-display text-2xl font-semibold text-brand-cloud pr-24 sm:pr-28"
               >
-                Get started
-              </button>
-            </li>
-            <li className="flex flex-col rounded-2xl border border-white/[0.08] bg-white/[0.02] p-7">
-              <h3 className="font-landing-display text-2xl font-semibold text-brand-cloud">Enterprise</h3>
+                Individual
+              </h3>
+
+              <div
+                className="mt-5 rounded-xl border border-white/12 bg-black/25 p-1"
+                role="tablist"
+                aria-label="Individual plan tier"
+              >
+                <div className="grid grid-cols-3 gap-1">
+                  {INDIVIDUAL_TIER_ORDER.map(id => {
+                    const sel = individualTier === id
+                    return (
+                      <button
+                        key={id}
+                        type="button"
+                        role="tab"
+                        aria-selected={sel}
+                        id={`individual-tab-${id}`}
+                        aria-controls="individual-plan-panel"
+                        onClick={() => setIndividualTier(id)}
+                        className={`rounded-lg px-2 py-2 text-center text-xs font-semibold transition sm:text-sm ${
+                          sel
+                            ? 'bg-white/[0.12] text-brand-cloud shadow-sm ring-1 ring-white/15'
+                            : 'text-brand-cloud/55 hover:bg-white/[0.05] hover:text-brand-cloud/85'
+                        }`}
+                      >
+                        {INDIVIDUAL_TIERS[id].label}
+                      </button>
+                    )
+                  })}
+                </div>
+              </div>
+
+              <div
+                id="individual-plan-panel"
+                role="tabpanel"
+                aria-labelledby={`individual-tab-${individualTier}`}
+                className="mt-5 flex min-h-[14rem] flex-col"
+              >
+                <p className="font-landing-display text-xl font-semibold text-brand-cloud sm:text-2xl">
+                  {INDIVIDUAL_TIERS[individualTier].label}
+                </p>
+                <p className="mt-1 text-3xl font-semibold tracking-tight text-brand-cloud">
+                  ${INDIVIDUAL_TIERS[individualTier].price}
+                  <span className="text-base font-normal text-brand-cloud/50">/mo</span>
+                </p>
+                <p className="mt-1 text-xs text-brand-cloud/40">Billed monthly, cancel anytime</p>
+                <ul className="mt-5 flex-1 space-y-2 text-sm text-brand-cloud/70">
+                  <li>{INDIVIDUAL_TIERS[individualTier].intro}</li>
+                  {INDIVIDUAL_TIERS[individualTier].bullets.map(line => (
+                    <li key={line}>{line}</li>
+                  ))}
+                </ul>
+                {INDIVIDUAL_TIERS[individualTier].ctaVariant === 'solid' ? (
+                  <button
+                    type="button"
+                    onClick={() => openSignup(individualTier)}
+                    className="mt-8 w-full rounded-xl bg-brand-cloud py-3 text-sm font-semibold text-brand-navy shadow-md transition hover:bg-white"
+                  >
+                    Get started
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => openSignup(individualTier)}
+                    className="mt-8 w-full rounded-xl border border-white/15 py-3 text-sm font-semibold text-brand-cloud transition hover:bg-white/[0.06]"
+                  >
+                    Get started
+                  </button>
+                )}
+              </div>
+            </article>
+
+            <article className="flex flex-col rounded-2xl border border-white/[0.08] bg-white/[0.02] p-7">
+              <h3 className="font-landing-display text-2xl font-semibold text-brand-cloud">Brokerage</h3>
               <p className="mt-1 text-lg text-brand-cloud/60">Brokerage-wide</p>
               <ul className="mt-6 flex-1 space-y-2 text-sm text-brand-cloud/55">
                 <li>Volume pricing, security review, and onboarding for your firm</li>
                 <li>Custom token limits and terms</li>
                 <li>Dedicated rollout support</li>
               </ul>
-              {enterpriseMailto ? (
+              {brokerageMailto ? (
                 <a
-                  href={enterpriseMailto}
+                  href={brokerageMailto}
                   className="mt-8 inline-flex w-full items-center justify-center rounded-xl border border-white/15 py-3 text-sm font-semibold text-brand-cloud transition hover:bg-white/[0.06]"
                 >
                   Contact sales
@@ -314,18 +652,18 @@ export default function LandingPage({ needsDeviceLink }: Props) {
                   Set <code className="text-brand-mint/90">VITE_SALES_EMAIL</code> for the contact button.
                 </p>
               )}
-            </li>
-          </ul>
+            </article>
+          </div>
         </section>
       </main>
 
       <footer className="relative border-t border-white/[0.06] px-5 py-10 sm:px-8">
         <div className="mx-auto max-w-6xl text-center text-xs leading-relaxed text-brand-cloud/40">
           <p>
-            Email and document sync are optional and only bring in what you choose. Kova is not affiliated with Google,
+            Email and document sync are optional and only bring in what you choose. Reco is not affiliated with Google,
             Anthropic, OpenAI, or Google DeepMind.
           </p>
-          <p className="mt-3 font-landing-display text-sm text-brand-cloud/50">Kova</p>
+          <p className="mt-3 font-landing-display text-sm text-brand-cloud/50">Reco</p>
           <p className="mt-2 flex items-center justify-center gap-4">
             <a href="/privacy" className="hover:text-brand-cloud/70 transition">Privacy Policy</a>
             <span aria-hidden>·</span>
@@ -334,5 +672,6 @@ export default function LandingPage({ needsDeviceLink }: Props) {
         </div>
       </footer>
     </div>
+    </>
   )
 }

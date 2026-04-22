@@ -6,14 +6,16 @@ from database import Base
 
 
 class Account(Base):
-    """Google user (OIDC `sub`) — one row per person using the app."""
+    """User account — created via Google OAuth (`sub` as id) or email signup (UUID as id)."""
 
     __tablename__ = "accounts"
 
     id = Column(String, primary_key=True)
-    email = Column(String)
+    email = Column(String, unique=True)
     name = Column(String)
     picture = Column(String)
+    auth_provider = Column(String, nullable=False, default="google")  # "google" | "email"
+    password_hash = Column(String, nullable=True)  # null for Google-only accounts
     # Optional overrides for role-specific AI strategy text (NULL = use app default).
     system_prompt_buyer = Column(Text, nullable=True)
     system_prompt_seller = Column(Text, nullable=True)

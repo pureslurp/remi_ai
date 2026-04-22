@@ -3,14 +3,18 @@ import hashlib
 import json
 import logging
 import os
+import re
 import secrets
 import time
 import urllib.error
 import urllib.request
 from datetime import datetime
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
+from passlib.hash import bcrypt
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from config import (
@@ -32,16 +36,19 @@ from database import get_db
 from deps.auth import require_account
 from deps.session_jwt import create_session_token, decode_session_token
 from models import Account
+from models.google_oauth import GoogleOAuthCredential
 from services import google_token_store
 from services.usage_entitlements import default_subscription_tier_for_new_account
 
-logger = logging.getLogger("kova.auth")
+_EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+logger = logging.getLogger("reco.auth")
 
 # Short-lived cookie that binds the OAuth `state` param to this browser.
 # Without this, /api/auth/google/callback accepts any valid Google code+state,
 # which lets an attacker log the victim into the attacker's Google account
 # (OAuth login CSRF).
-_OAUTH_STATE_COOKIE = "kova_oauth_state"
+_OAUTH_STATE_COOKIE = "reco_oauth_state"
 _OAUTH_STATE_TTL_SECONDS = 10 * 60  # 10 min — covers Google consent screen
 
 
@@ -53,8 +60,8 @@ def _cookie_transport(request: Request) -> tuple[bool, str]:
 
 
 def _auth_debug_enabled() -> bool:
-    """Rich JSON errors + /diagnostics. KOVA_AUTH_DEBUG=1 or KOVA_DEBUG / REMIP_DEBUG."""
-    for key in ("KOVA_AUTH_DEBUG", "KOVA_DEBUG", "REMIP_DEBUG"):
+    """Rich JSON errors + /diagnostics. RECO_AUTH_DEBUG=1 or RECO_DEBUG / REMIP_DEBUG."""
+    for key in ("RECO_AUTH_DEBUG", "RECO_DEBUG", "KOVA_AUTH_DEBUG", "KOVA_DEBUG", "REMIP_DEBUG"):
         v = os.environ.get(key, "").strip().lower()
         if v in ("1", "true", "yes"):
             return True
@@ -86,7 +93,9 @@ def _check_oauth_state(received: str | None, cookie: str | None) -> tuple[bool, 
     # Compare in constant time; must match the value we stored in the cookie.
     if not hmac.compare_digest(received, cookie):
         return False, "state_query_cookie_mismatch"
-    parts = received.split(".")
+    # Strip linking prefix before HMAC validation
+    raw = received.removeprefix(_LINKING_PREFIX) if received.startswith(_LINKING_PREFIX) else received
+    parts = raw.split(".")
     if len(parts) != 3:
         return False, "state_malformed"
     nonce, ts, mac = parts
@@ -111,6 +120,201 @@ def _verify_oauth_state(received: str | None, cookie: str | None) -> bool:
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
+# ---------------------------------------------------------------------------
+# Pydantic request bodies for email auth
+# ---------------------------------------------------------------------------
+
+
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+    name: str | None = None
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+# ---------------------------------------------------------------------------
+# Email auth helpers
+# ---------------------------------------------------------------------------
+
+_LINKING_PREFIX = "link."  # prepended to state nonce when linking Google
+
+
+def _set_session_cookie(response: Response, request: Request, account_id: str) -> None:
+    """Create a session JWT and set it as an HttpOnly cookie."""
+    tok = create_session_token(account_id)
+    _sec, _ss = _cookie_transport(request)
+    response.set_cookie(
+        SESSION_COOKIE_NAME,
+        tok,
+        httponly=True,
+        secure=_sec,
+        samesite=_ss,
+        max_age=SESSION_TTL_DAYS * 86400,
+        path="/",
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/auth/signup
+# ---------------------------------------------------------------------------
+
+
+@router.post("/signup")
+def email_signup(body: SignupRequest, request: Request, db: Session = Depends(get_db)):
+    if not _EMAIL_RE.match(body.email):
+        raise HTTPException(400, "Invalid email address.")
+    if len(body.password) < 8:
+        raise HTTPException(400, "Password must be at least 8 characters.")
+
+    existing = db.query(Account).filter(Account.email == body.email).first()
+    if existing:
+        if existing.auth_provider == "google":
+            raise HTTPException(
+                409,
+                "An account with this email exists via Google. Please sign in with Google.",
+            )
+        raise HTTPException(409, "Account already exists. Try signing in.")
+
+    account_id = str(uuid4())
+    now = datetime.utcnow()
+    db.add(
+        Account(
+            id=account_id,
+            email=body.email,
+            name=body.name,
+            auth_provider="email",
+            password_hash=bcrypt.hash(body.password),
+            subscription_tier=default_subscription_tier_for_new_account(account_id),
+            created_at=now,
+            updated_at=now,
+        )
+    )
+    db.commit()
+
+    resp = JSONResponse(
+        content={
+            "authenticated": True,
+            "email": body.email,
+            "name": body.name,
+            "google_connected": False,
+        }
+    )
+    _set_session_cookie(resp, request, account_id)
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# POST /api/auth/login
+# ---------------------------------------------------------------------------
+
+
+@router.post("/login")
+def email_login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    account = db.query(Account).filter(Account.email == body.email).first()
+    if not account or not account.password_hash:
+        raise HTTPException(401, "Invalid email or password.")
+    if not bcrypt.verify(body.password, account.password_hash):
+        raise HTTPException(401, "Invalid email or password.")
+
+    google_connected = (
+        db.query(GoogleOAuthCredential).filter(GoogleOAuthCredential.id == account.id).first() is not None
+    )
+
+    resp = JSONResponse(
+        content={
+            "authenticated": True,
+            "email": account.email,
+            "name": account.name,
+            "picture": account.picture,
+            "google_connected": google_connected,
+        }
+    )
+    _set_session_cookie(resp, request, account.id)
+    return resp
+
+
+# ---------------------------------------------------------------------------
+# GET /api/auth/session
+# ---------------------------------------------------------------------------
+
+
+@router.get("/session")
+def get_session(request: Request, db: Session = Depends(get_db)):
+    raw = request.cookies.get(SESSION_COOKIE_NAME)
+    sub = decode_session_token(raw) if raw else None
+    if not sub:
+        return {"authenticated": False}
+
+    account = db.get(Account, sub)
+    if not account:
+        return {"authenticated": False}
+
+    google_connected = (
+        db.query(GoogleOAuthCredential).filter(GoogleOAuthCredential.id == account.id).first() is not None
+    )
+
+    return {
+        "authenticated": True,
+        "account": {
+            "email": account.email,
+            "name": account.name,
+            "picture": account.picture,
+            "auth_provider": getattr(account, "auth_provider", "google"),
+        },
+        "google_connected": google_connected,
+    }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/auth/logout
+# ---------------------------------------------------------------------------
+
+
+@router.post("/logout", status_code=204)
+def logout(request: Request, response: Response):
+    _sec, _ss = _cookie_transport(request)
+    response.delete_cookie(SESSION_COOKIE_NAME, path="/", secure=_sec, samesite=_ss)
+    return response
+
+
+# ---------------------------------------------------------------------------
+# GET /api/auth/google/link  (for email users to connect Google)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/google/link")
+def google_link_url(
+    request: Request,
+    response: Response,
+    _account_id: str = Depends(require_account),
+):
+    """Generate a Google OAuth URL for linking Google to an existing email account."""
+    try:
+        flow = _get_flow()
+    except FileNotFoundError:
+        raise HTTPException(400, "Google OAuth not configured.")
+
+    # Embed linking flag in the state nonce so the callback knows this is a link, not a sign-in.
+    state = _LINKING_PREFIX + _mint_oauth_state()
+    auth_url, _ = flow.authorization_url(
+        access_type="offline", prompt="consent", state=state
+    )
+    _sec, _ss = _cookie_transport(request)
+    response.set_cookie(
+        _OAUTH_STATE_COOKIE,
+        state,
+        httponly=True,
+        secure=_sec,
+        samesite=_ss,
+        max_age=_OAUTH_STATE_TTL_SECONDS,
+        path="/",
+    )
+    return {"url": auth_url}
+
 
 def _google_user_profile(access_token: str) -> dict:
     req = urllib.request.Request(
@@ -129,7 +333,7 @@ def _web_client_config() -> dict:
         raise HTTPException(
             400,
             "Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET for cloud OAuth, "
-            "or place credentials.json at ~/.kova/credentials.json for local use.",
+            "or place credentials.json at ~/.reco/credentials.json for local use.",
         )
     return {
         "web": {
@@ -191,7 +395,7 @@ def google_auth_url(request: Request, response: Response):
     except FileNotFoundError:
         raise HTTPException(
             400,
-            "credentials.json not found at ~/.kova/credentials.json. "
+            "credentials.json not found at ~/.reco/credentials.json. "
             "See README for GCP setup, or set GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET for web OAuth.",
         )
     state = _mint_oauth_state()
@@ -340,40 +544,94 @@ def google_callback(
             "Google did not return user id (sub); cannot create session.",
         )
 
-    try:
-        _upsert_account(db, sub, prof.get("email"), prof.get("name"), prof.get("picture"))
-    except Exception as exc:
-        logger.exception("oauth _upsert_account failed")
-        if dbg:
-            payload: dict = {
-                "step": "db_upsert_account",
-                "error_type": type(exc).__name__,
-                "message": str(exc),
-            }
-            payload.update(postgres_connection_diagnostics())
-            return JSONResponse(status_code=500, content=payload)
-        raise HTTPException(500, "Could not save account.") from exc
+    # --- Linking mode: attach Google creds to the currently signed-in email account ---
+    is_linking = bool(state and state.startswith(_LINKING_PREFIX))
+    if is_linking:
+        raw_session = request.cookies.get(SESSION_COOKIE_NAME)
+        current_account_id = decode_session_token(raw_session) if raw_session else None
+        if not current_account_id:
+            raise HTTPException(400, "No active session — cannot link Google. Please sign in first.")
 
-    try:
-        google_token_store.save_credentials_json_for_account(sub, raw_json)
-    except Exception as exc:
-        logger.exception("oauth save_credentials_json_for_account failed")
-        if dbg:
-            return JSONResponse(
-                status_code=500,
-                content={
-                    "step": "save_google_token",
+        try:
+            google_token_store.save_credentials_json_for_account(current_account_id, raw_json)
+        except Exception as exc:
+            logger.exception("oauth link save_credentials failed")
+            raise HTTPException(500, "Could not store Google credentials.") from exc
+
+        # Update profile picture from Google
+        account = db.get(Account, current_account_id)
+        if account and prof.get("picture"):
+            account.picture = prof["picture"]
+            account.updated_at = datetime.utcnow()
+            db.commit()
+
+        resp = RedirectResponse(
+            url=f"{POST_GOOGLE_OAUTH_FRONTEND_ORIGIN}/?google_linked=1"
+        )
+        resp.delete_cookie(_OAUTH_STATE_COOKIE, path="/", secure=_sec, samesite=_ss)
+        logger.info("oauth callback ok (google linked to account %s)", current_account_id)
+        return resp
+
+    # --- Normal sign-in: check for same-email auto-linking ---
+    google_email = prof.get("email")
+    existing_email_account = (
+        db.query(Account)
+        .filter(Account.email == google_email, Account.auth_provider == "email")
+        .first()
+        if google_email
+        else None
+    )
+
+    if existing_email_account:
+        # Auto-link: store Google creds under the existing email account, sign in as them
+        target_id = existing_email_account.id
+        try:
+            google_token_store.save_credentials_json_for_account(target_id, raw_json)
+        except Exception as exc:
+            logger.exception("oauth auto-link save_credentials failed")
+            raise HTTPException(500, "Could not store Google credentials.") from exc
+
+        if prof.get("picture"):
+            existing_email_account.picture = prof["picture"]
+        existing_email_account.updated_at = datetime.utcnow()
+        db.commit()
+    else:
+        # Standard Google sign-in: upsert account with Google sub as ID
+        target_id = sub
+        try:
+            _upsert_account(db, sub, google_email, prof.get("name"), prof.get("picture"))
+        except Exception as exc:
+            logger.exception("oauth _upsert_account failed")
+            if dbg:
+                payload: dict = {
+                    "step": "db_upsert_account",
                     "error_type": type(exc).__name__,
                     "message": str(exc),
-                },
-            )
-        raise HTTPException(500, "Could not store Google credentials.") from exc
+                }
+                payload.update(postgres_connection_diagnostics())
+                return JSONResponse(status_code=500, content=payload)
+            raise HTTPException(500, "Could not save account.") from exc
+
+        try:
+            google_token_store.save_credentials_json_for_account(sub, raw_json)
+        except Exception as exc:
+            logger.exception("oauth save_credentials_json_for_account failed")
+            if dbg:
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "step": "save_google_token",
+                        "error_type": type(exc).__name__,
+                        "message": str(exc),
+                    },
+                )
+            raise HTTPException(500, "Could not store Google credentials.") from exc
 
     resp = RedirectResponse(
         url=f"{POST_GOOGLE_OAUTH_FRONTEND_ORIGIN}/?google_connected=1"
     )
     try:
-        session_tok = create_session_token(sub)
+        session_tok = create_session_token(target_id)
     except RuntimeError as exc:
         logger.error("create_session_token: %s", exc)
         if dbg:
@@ -400,7 +658,7 @@ def google_callback(
         path="/",
     )
     resp.delete_cookie(_OAUTH_STATE_COOKIE, path="/", secure=_sec, samesite=_ss)
-    logger.info("oauth callback ok (postgres)")
+    logger.info("oauth callback ok (postgres, account=%s)", target_id)
     return resp
 
 
@@ -480,8 +738,8 @@ def google_oauth_diagnostics():
         "credentials_file_exists": CREDENTIALS_PATH.is_file(),
         "web_oauth_env_configured": bool(GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET),
         "debug_json_errors": _auth_debug_enabled(),
-        "hint": "Set KOVA_AUTH_DEBUG=1 (or KOVA_DEBUG=1) for detailed JSON on OAuth callback errors. "
-        "Watch backend logs on the kova.auth logger.",
+        "hint": "Set RECO_AUTH_DEBUG=1 (or RECO_DEBUG=1) for detailed JSON on OAuth callback errors. "
+        "Watch backend logs on the reco.auth logger.",
     }
     base.update(postgres_connection_diagnostics())
     return base
@@ -497,8 +755,14 @@ def google_disconnect(
     request: Request,
     response: Response,
     _account_id: str = Depends(require_account),
+    db: Session = Depends(get_db),
 ):
     google_token_store.clear_credentials()
-    _sec, _ss = _cookie_transport(request)
-    response.delete_cookie(SESSION_COOKIE_NAME, path="/", secure=_sec, samesite=_ss)
+    # For Google-only accounts (no password), disconnecting Google means full sign-out.
+    # For email accounts that linked Google, keep the session alive.
+    account = db.get(Account, _account_id)
+    sign_out = not account or getattr(account, "auth_provider", "google") == "google"
+    if sign_out:
+        _sec, _ss = _cookie_transport(request)
+        response.delete_cookie(SESSION_COOKIE_NAME, path="/", secure=_sec, samesite=_ss)
     return response

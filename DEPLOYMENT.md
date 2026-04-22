@@ -1,4 +1,4 @@
-# Kova — cloud deployment (Supabase + Vercel + API host)
+# Reco — cloud deployment (Supabase + Vercel + API host)
 
 This document describes **manual** setup in Supabase, Vercel, Google Cloud, and your API host (Railway, Render, or Fly.io). The application reads configuration from **environment variables** on the API server and (for the frontend) from Vite `VITE_*` variables on Vercel.
 
@@ -28,7 +28,7 @@ The sections below are numbered **1–5** in the doc. Follow them **in this sequ
 
 The browser talks to the **API** for `/api/*` routes. Choose one of:
 
-1. **Recommended**: set `VITE_API_BASE` on Vercel to your public API origin (e.g. `https://kova-api.railway.app`). The frontend then calls `https://kova-api.railway.app/api/...`. Enable **CORS** on the API for your Vercel URL(s).
+1. **Recommended**: set `VITE_API_BASE` on Vercel to your public API origin (e.g. `https://reco-api.railway.app`). The frontend then calls `https://reco-api.railway.app/api/...`. Enable **CORS** on the API for your Vercel URL(s).
 2. **Alternative**: add a `rewrites` entry in `frontend/vercel.json` to proxy `/api/*` to your API (replace the placeholder host). Keep `VITE_API_BASE` unset so the app uses same-origin `/api`.
 
 ---
@@ -69,26 +69,26 @@ Typical env vars:
 | `GOOGLE_CLIENT_ID` | For Gmail/Drive in cloud | Web OAuth client ID |
 | `GOOGLE_CLIENT_SECRET` | For Gmail/Drive in cloud | Web OAuth client secret |
 | `GOOGLE_REDIRECT_URI` | Yes in cloud | Must match GCP, e.g. `https://YOUR_API/api/auth/google/callback` |
-| `FRONTEND_ORIGIN` | Yes in cloud | Vercel site URL, e.g. `https://kova.vercel.app` (no trailing slash) |
-| `CORS_ORIGINS` | Yes in cloud | Comma-separated list of allowed browser origins (include `https://kova.vercel.app` and preview URLs if needed) |
-| `SESSION_SECRET` | Yes with Postgres + Google | Long random string used to sign the **`kova_session` HttpOnly cookie** after OAuth. Without it, users cannot stay signed in. The browser must send cookies on API calls (`credentials: 'include'` in the frontend — already enabled). |
+| `FRONTEND_ORIGIN` | Yes in cloud | Vercel site URL, e.g. `https://reco.vercel.app` (no trailing slash) |
+| `CORS_ORIGINS` | Yes in cloud | Comma-separated list of allowed browser origins (include `https://reco.vercel.app` and preview URLs if needed) |
+| `SESSION_SECRET` | Yes with Postgres + Google | Long random string used to sign the **`reco_session` HttpOnly cookie** after OAuth. Without it, users cannot stay signed in. The browser must send cookies on API calls (`credentials: 'include'` in the frontend — already enabled). |
 | `PORT` | Usually auto | Render/Railway inject this |
 
 **Multi-tenant:** Each Google user gets an `accounts` row (keyed by Google `sub`), their own `projects.owner_id`, and their own `google_oauth_credentials` row. API routes require a valid session cookie except `/api/health`, `/api/auth/google/url`, `/api/auth/google/callback`, and `/api/auth/google/status`.
 
-**Local-style Google** still works: place `credentials.json` under `~/.kova/` and omit `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`; tokens are stored in `google_token.json` on disk. With **Postgres**, tokens are stored in the `google_oauth_credentials` table instead.
+**Local-style Google** still works: place `credentials.json` under `~/.reco/` and omit `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`; tokens are stored in `google_token.json` on disk. With **Postgres**, tokens are stored in the `google_oauth_credentials` table instead.
 
 Health check: `GET /api/health`.
 
 ### Railway (step-by-step)
 
-These steps assume your code is on GitHub (e.g. `your-org/kova`) and you already have **Supabase** credentials from [§1](#1-supabase). Railway’s UI names move occasionally; if something looks different, use the search box in the dashboard.
+These steps assume your code is on GitHub (e.g. `your-org/reco`) and you already have **Supabase** credentials from [§1](#1-supabase). Railway’s UI names move occasionally; if something looks different, use the search box in the dashboard.
 
 #### A. Create the service
 
 1. Open [https://railway.app](https://railway.app) and sign in.
 2. **New project** → **Deploy from GitHub repo** (connect GitHub if asked).
-3. Pick your **`kova`** repository (or whatever you named it).
+3. Pick your **`reco`** repository (or whatever you named it).
 4. Railway will propose a new **service** from that repo. Confirm it — you should see a build starting.
 
 #### B. Force Docker (repo root `Dockerfile`)
@@ -121,7 +121,7 @@ After you have your **public API URL** (next step) and your **Vercel** URL, add 
 | ---- | ----- |
 | `GOOGLE_REDIRECT_URI` | `https://<YOUR-RAILWAY-HOST>/api/auth/google/callback` (must match Google Cloud exactly). |
 | `FRONTEND_ORIGIN` | `https://<your-app>.vercel.app` (no trailing slash). |
-| `CORS_ORIGINS` | Same as Vercel origin(s), comma-separated if several, e.g. `https://kova.vercel.app,http://localhost:5173`. |
+| `CORS_ORIGINS` | Same as Vercel origin(s), comma-separated if several, e.g. `https://reco.vercel.app,http://localhost:5173`. |
 | `GOOGLE_CLIENT_ID` | From Google Cloud Web client (§3). |
 | `GOOGLE_CLIENT_SECRET` | From Google Cloud Web client (§3). |
 
@@ -173,7 +173,7 @@ Use that same HTTPS origin (the hostname from step **D.3**) as **`VITE_API_BASE`
 ## 3. Google Cloud (Web OAuth for production)
 
 1. APIs & Services → Credentials → **Create credentials** → **OAuth client ID** → **Web application**.
-2. **Authorized JavaScript origins**: your Vercel URL(s), e.g. `https://kova.vercel.app`.
+2. **Authorized JavaScript origins**: your Vercel URL(s), e.g. `https://reco.vercel.app`.
 3. **Authorized redirect URIs**: exactly `https://<YOUR_API_HOST>/api/auth/google/callback` (same value as `GOOGLE_REDIRECT_URI`).
 4. Put **Client ID** and **Client secret** in the API environment as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 5. **`FRONTEND_ORIGIN` on Railway** (required for a good UX): after Google approves the user, the API sends the browser to `{FRONTEND_ORIGIN}/?google_connected=1`. If `FRONTEND_ORIGIN` is missing, the app uses the dev default **`http://localhost:5173`**, so production users look like “OAuth broke” when they actually land on localhost. Set it to your **Vercel** site origin (no path, no trailing slash), same host you put in `CORS_ORIGINS`.
@@ -218,4 +218,4 @@ Then leave `VITE_API_BASE` unset so requests stay same-origin.
 
 ## Local development (unchanged)
 
-Use `./run.sh` and `.env` with `ANTHROPIC_API_KEY`. Without `DATABASE_URL`, the app uses SQLite under `~/.kova/` and local disk for documents unless Supabase Storage env vars are set.
+Use `./run.sh` and `.env` with `ANTHROPIC_API_KEY`. Without `DATABASE_URL`, the app uses SQLite under `~/.reco/` and local disk for documents unless Supabase Storage env vars are set.

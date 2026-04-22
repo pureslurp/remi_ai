@@ -19,7 +19,7 @@ from services.llm_config import (
     openai_api_key,
 )
 
-logger = logging.getLogger("kova")
+logger = logging.getLogger("reco")
 
 _anthropic_client: anthropic.Anthropic | None = None
 

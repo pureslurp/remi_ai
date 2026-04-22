@@ -125,8 +125,25 @@ export const syncDrive = (projectId: string) =>
     { method: 'POST' },
   )
 
-// Auth
+// Auth — email
+export const signup = (data: { email: string; password: string; name?: string }) =>
+  req<{ authenticated: boolean; email: string; name?: string; google_connected: boolean }>('/auth/signup', { method: 'POST', body: JSON.stringify(data) })
+
+export const login = (data: { email: string; password: string }) =>
+  req<{ authenticated: boolean; email: string; name?: string; picture?: string; google_connected: boolean }>('/auth/login', { method: 'POST', body: JSON.stringify(data) })
+
+export type SessionStatus = {
+  authenticated: boolean
+  account?: { email: string; name?: string; picture?: string; auth_provider: string }
+  google_connected?: boolean
+}
+
+export const getSessionStatus = () => req<SessionStatus>('/auth/session')
+export const logout = () => req<void>('/auth/logout', { method: 'POST' })
+
+// Auth — Google
 export const getGoogleAuthUrl = () => req<{ url: string }>('/auth/google/url')
+export const getGoogleLinkUrl = () => req<{ url: string }>('/auth/google/link')
 export type GoogleStatus = {
   authenticated: boolean
   reason?: string

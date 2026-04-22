@@ -17,6 +17,7 @@ interface AppStore {
   emailThreads: EmailThread[]
   googleConnected: boolean
   googleUser: GoogleUserProfile | null
+  authProvider: 'google' | 'email' | null
   streamingContent: string
   isStreaming: boolean
 
@@ -30,6 +31,7 @@ interface AppStore {
   setEmailThreads: (threads: EmailThread[]) => void
   setGoogleConnected: (v: boolean) => void
   setGoogleUser: (u: GoogleUserProfile | null) => void
+  setAuthProvider: (v: 'google' | 'email' | null) => void
   setStreamingContent: (text: string) => void
   setIsStreaming: (v: boolean) => void
 }
@@ -44,6 +46,7 @@ export const useAppStore = create<AppStore>((set) => ({
   emailThreads: [],
   googleConnected: false,
   googleUser: null,
+  authProvider: null,
   streamingContent: '',
   isStreaming: false,
 
@@ -57,6 +60,7 @@ export const useAppStore = create<AppStore>((set) => ({
   setEmailThreads: (emailThreads) => set({ emailThreads }),
   setGoogleConnected: (googleConnected) => set({ googleConnected }),
   setGoogleUser: (googleUser) => set({ googleUser }),
+  setAuthProvider: (authProvider) => set({ authProvider }),
   setStreamingContent: (streamingContent) => set({ streamingContent }),
   setIsStreaming: (isStreaming) => set({ isStreaming }),
 }))

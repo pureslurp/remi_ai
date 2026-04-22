@@ -4,7 +4,7 @@ import * as api from '../api/client'
 import SystemPromptSettings from './SystemPromptSettings'
 
 export default function UserProfile({ compact = false }: { compact?: boolean }) {
-  const { googleUser } = useAppStore()
+  const { googleUser, googleConnected, authProvider } = useAppStore()
   const [open, setOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -23,11 +23,21 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
 
   const signOut = async () => {
     try {
-      await api.disconnectGoogle()
+      await api.logout()
     } catch {
       /* still clear local session */
     }
     window.location.assign('/')
+  }
+
+  const connectGoogle = async () => {
+    try {
+      const { url } = await api.getGoogleLinkUrl()
+      window.location.href = url
+    } catch {
+      const { url } = await api.getGoogleAuthUrl()
+      window.location.href = url
+    }
   }
 
   const avatar = googleUser?.picture ? (
@@ -67,7 +77,9 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
           <>
             <div className="min-w-0 flex-1">
               <p className="text-xs font-medium text-brand-cloud truncate">{label}</p>
-              <p className="text-[10px] text-brand-cloud/45 truncate uppercase tracking-wide">Google account</p>
+              <p className="text-[10px] text-brand-cloud/45 truncate uppercase tracking-wide">
+                {authProvider === 'email' ? (googleConnected ? 'Email (Google linked)' : 'Email account') : 'Google account'}
+              </p>
             </div>
             <span className="text-brand-cloud/40 text-xs shrink-0">{open ? '▲' : '▼'}</span>
           </>
@@ -95,6 +107,18 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
           >
             AI prompt settings…
           </button>
+          {!googleConnected && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                connectGoogle()
+              }}
+              className="w-full text-left px-3 py-2 text-sm text-brand-mint/90 hover:bg-white/[0.06] transition"
+            >
+              Connect Google
+            </button>
+          )}
           <button
             type="button"
             onClick={signOut}

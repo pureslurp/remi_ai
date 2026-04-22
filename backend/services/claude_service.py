@@ -9,7 +9,7 @@ from database import SessionLocal
 from models import ChatMessage
 from config import ANTHROPIC_MODEL, MAX_TOKENS
 
-logger = logging.getLogger("kova")
+logger = logging.getLogger("reco")
 
 _client = None
 

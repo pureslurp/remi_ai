@@ -11,9 +11,9 @@ import ResizableDivider from './components/ResizableDivider'
 import { useProjectData } from './hooks/useProject'
 import type { Project } from './types'
 
-const LS_SIDEBAR = 'kova.layout.sidebarWidth'
-const LS_RIGHT = 'kova.layout.rightPanelWidth'
-const LS_SIDEBAR_MODE = 'kova.layout.sidebarMode'
+const LS_SIDEBAR = 'reco.layout.sidebarWidth'
+const LS_RIGHT = 'reco.layout.rightPanelWidth'
+const LS_SIDEBAR_MODE = 'reco.layout.sidebarMode'
 
 const SIDEBAR = { min: 200, max: 440, def: 220 } as const
 const SIDEBAR_RAIL = 52
@@ -64,7 +64,7 @@ export default function App() {
   if (window.location.pathname === '/privacy') return <PrivacyPolicy />
   if (window.location.pathname === '/terms') return <TermsOfService />
 
-  const { projects, activeProjectId, setProjects, setActiveProject, setGoogleConnected, setGoogleUser } =
+  const { projects, activeProjectId, setProjects, setActiveProject, setGoogleConnected, setGoogleUser, setAuthProvider } =
     useAppStore()
 
   const [authReady, setAuthReady] = useState(false)
@@ -74,24 +74,26 @@ export default function App() {
   const bootstrap = useCallback(async () => {
     setAuthError(null)
     const params = new URLSearchParams(window.location.search)
-    if (params.get('google_connected')) {
+    if (params.get('google_connected') || params.get('google_linked')) {
       window.history.replaceState({}, '', '/')
     }
 
     try {
-      const status = await api.getGoogleStatus()
-      const unlocked = status.authenticated === true
-      setGoogleConnected(unlocked)
+      const session = await api.getSessionStatus()
+      const unlocked = session.authenticated === true
       setSessionUnlocked(unlocked)
+      setGoogleConnected(session.google_connected ?? false)
+      setAuthProvider(session.account?.auth_provider as 'google' | 'email' | null ?? null)
 
-      if (unlocked && status.email !== undefined) {
+      if (unlocked && session.account) {
         setGoogleUser({
-          email: status.email,
-          name: status.name,
-          picture: status.picture,
+          email: session.account.email,
+          name: session.account.name,
+          picture: session.account.picture,
         })
       } else {
         setGoogleUser(null)
+        setAuthProvider(null)
       }
 
       if (unlocked) {
@@ -103,6 +105,7 @@ export default function App() {
             setGoogleConnected(false)
             setSessionUnlocked(false)
             setGoogleUser(null)
+            setAuthProvider(null)
             setProjects([])
             setActiveProject(null)
           } else {
@@ -118,13 +121,14 @@ export default function App() {
       setAuthError(msg)
       setGoogleConnected(false)
       setGoogleUser(null)
+      setAuthProvider(null)
       setSessionUnlocked(false)
       setProjects([])
       setActiveProject(null)
     } finally {
       setAuthReady(true)
     }
-  }, [setProjects, setActiveProject, setGoogleConnected, setGoogleUser])
+  }, [setProjects, setActiveProject, setGoogleConnected, setGoogleUser, setAuthProvider])
 
   useEffect(() => {
     bootstrap()
@@ -133,6 +137,21 @@ export default function App() {
   useProjectData(sessionUnlocked ? activeProjectId : null)
 
   const activeProject = projects.find(p => p.id === activeProjectId)
+
+  const googleConnected = useAppStore(s => s.googleConnected)
+  const [googleBannerDismissed, setGoogleBannerDismissed] = useState(false)
+  const showGoogleBanner = sessionUnlocked && !googleConnected && !googleBannerDismissed
+
+  const handleConnectGoogle = async () => {
+    try {
+      const { url } = await api.getGoogleLinkUrl()
+      window.location.href = url
+    } catch {
+      // Fallback to regular Google auth URL if link endpoint fails
+      const { url } = await api.getGoogleAuthUrl()
+      window.location.href = url
+    }
+  }
 
   const [sidebarMode, setSidebarMode] = useState<SidebarMode>(() => readStoredSidebarMode())
   const [sidebarWidth, setSidebarWidth] = useState(() =>
@@ -215,11 +234,36 @@ export default function App() {
   }
 
   if (!sessionUnlocked) {
-    return <LandingPage />
+    return <LandingPage onEmailAuth={bootstrap} />
   }
 
   return (
-    <div className="flex flex-col h-screen kova-fade-in">
+    <div className="flex flex-col h-screen reco-fade-in">
+      {showGoogleBanner && (
+        <div className="flex items-center justify-between gap-3 border-b border-amber-400/20 bg-amber-500/[0.07] px-4 py-2.5 text-sm text-amber-100/90">
+          <p>
+            Connect your Google account to enable email sync and Drive document import.{' '}
+            <button
+              type="button"
+              onClick={handleConnectGoogle}
+              className="font-semibold text-brand-mint hover:text-brand-mint/80 transition underline underline-offset-2"
+            >
+              Connect Google
+            </button>
+          </p>
+          <button
+            type="button"
+            onClick={() => setGoogleBannerDismissed(true)}
+            className="shrink-0 rounded p-1 text-amber-100/50 hover:text-amber-100 transition"
+            aria-label="Dismiss"
+          >
+            <svg className="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+
       {sidebarMode === 'hidden' && (
         <button
           type="button"
@@ -274,9 +318,9 @@ export default function App() {
           <div className="flex-1 min-w-[240px] min-h-0 flex items-center justify-center overflow-auto">
             <div className="text-center px-6">
               <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center text-3xl font-semibold mx-auto mb-5 text-brand-cloud tracking-tight">
-                K
+                R
               </div>
-              <h2 className="text-xl font-semibold text-brand-cloud mb-1 tracking-tight">Welcome to Kova</h2>
+              <h2 className="text-xl font-semibold text-brand-cloud mb-1 tracking-tight">Welcome to Reco</h2>
               <p className="text-brand-cloud/60 text-sm">Create your first client in the sidebar to get started.</p>
               {sidebarMode === 'hidden' && (
                 <p className="text-brand-cloud/40 text-xs mt-3 max-w-sm mx-auto">

@@ -10,7 +10,7 @@ from config import GOOGLE_SCOPES
 from services.document_service import process_bytes
 from services import google_token_store
 
-logger = logging.getLogger("kova.drive")
+logger = logging.getLogger("reco.drive")
 
 
 def _get_creds():
