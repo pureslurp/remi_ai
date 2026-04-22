@@ -239,6 +239,28 @@ def _find_account_by_customer(customer_id: str, db: Session) -> Account | None:
     return db.query(Account).filter(Account.stripe_customer_id == customer_id).first()
 
 
+def _fetch_subscription_current_period_end(subscription_id: str | None) -> datetime | None:
+    """Stripe checkout.session does not include subscription period; retrieve the Subscription."""
+    if not subscription_id or not STRIPE_SECRET_KEY:
+        return None
+    sc = stripe.StripeClient(STRIPE_SECRET_KEY)
+    try:
+        sub = sc.v1.subscriptions.retrieve(subscription_id)
+    except stripe.StripeError as e:
+        logger.warning("Could not retrieve subscription %s for current_period_end: %s", subscription_id, e)
+        return None
+    raw = sub.to_dict() if hasattr(sub, "to_dict") else sub
+    if not isinstance(raw, dict):
+        return None
+    ts = raw.get("current_period_end")
+    if ts is None:
+        return None
+    try:
+        return datetime.utcfromtimestamp(int(ts))
+    except (TypeError, ValueError, OSError):
+        return None
+
+
 def _handle_checkout_completed(session: dict, db: Session) -> None:
     account_id: str | None = session.get("client_reference_id")
     customer_id = _stripe_expandable_id(session.get("customer"))
@@ -258,11 +280,20 @@ def _handle_checkout_completed(session: dict, db: Session) -> None:
     acc.stripe_subscription_id = subscription_id
     acc.subscription_tier = plan
     acc.subscription_status = "active"
+    period_end = _fetch_subscription_current_period_end(subscription_id)
+    if period_end:
+        acc.subscription_current_period_end = period_end
     # Reset the monthly usage counter for the new billing period
     acc.pro_billing_month = datetime.utcnow().strftime("%Y-%m")
     acc.pro_tokens_used = 0
     db.commit()
-    logger.info("Activated %s plan for account %s (sub=%s)", plan, account_id, subscription_id)
+    logger.info(
+        "Activated %s plan for account %s (sub=%s period_end=%s)",
+        plan,
+        account_id,
+        subscription_id,
+        acc.subscription_current_period_end,
+    )
 
 
 def _handle_subscription_updated(sub: dict, db: Session) -> None:
