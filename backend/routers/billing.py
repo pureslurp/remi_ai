@@ -203,7 +203,15 @@ async def stripe_webhook(
         raise HTTPException(status_code=400, detail="Invalid signature.")
 
     etype = event["type"]
-    data = event["data"]["object"]
+    raw_obj = event["data"]["object"]
+    # stripe-python returns a StripeObject, which doesn't implement `.get()`.
+    # Convert to a plain (recursively nested) dict so our handlers can use dict APIs.
+    if hasattr(raw_obj, "to_dict"):
+        data = raw_obj.to_dict()
+    elif isinstance(raw_obj, dict):
+        data = dict(raw_obj)
+    else:
+        data = raw_obj
 
     try:
         if etype == "checkout.session.completed":
