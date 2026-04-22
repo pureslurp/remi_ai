@@ -58,7 +58,7 @@ class CheckoutRequest(BaseModel):
 @router.post("/create-checkout-session")
 def create_checkout_session(
     body: CheckoutRequest,
-    account_id: str = Depends(CurrentAccount),
+    account_id: CurrentAccount,
     db: Session = Depends(get_db),
 ):
     """Create a Stripe Checkout session for a paid plan upgrade."""
@@ -106,7 +106,7 @@ def create_checkout_session(
 
 @router.post("/portal")
 def create_portal_session(
-    account_id: str = Depends(CurrentAccount),
+    account_id: CurrentAccount,
     db: Session = Depends(get_db),
 ):
     """Create a Stripe Customer Portal session for subscription management."""
