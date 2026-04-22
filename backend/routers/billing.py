@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Literal
 
 import stripe
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Body, Depends, Header, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -26,6 +26,48 @@ from models import Account
 logger = logging.getLogger("reco.billing")
 
 router = APIRouter(prefix="/api/billing", tags=["billing"])
+
+
+def _stripe_expandable_id(value: object) -> str | None:
+    """Normalize Stripe id fields: string id, or expanded object with ``id``."""
+    if value is None:
+        return None
+    if isinstance(value, str) and value:
+        return value
+    if isinstance(value, dict) and value.get("id") is not None:
+        return str(value["id"])
+    return str(value) if value else None
+
+
+def _line_item_price_id(item: object) -> str | None:
+    """Handle ``price`` as id string (newer API) or ``{\"id\": ...}`` object."""
+    if not isinstance(item, dict):
+        return None
+    p = item.get("price")
+    if p is None:
+        return None
+    if isinstance(p, str) and p:
+        return p
+    if isinstance(p, dict) and p.get("id") is not None:
+        return str(p["id"])
+    return None
+
+
+def _first_subscription_price_id(sub: dict) -> str | None:
+    items = (sub.get("items") or {}) if isinstance(sub.get("items"), dict) else {}
+    data = items.get("data") or []
+    if not data or not isinstance(data, list):
+        return None
+    return _line_item_price_id(data[0]) if data else None
+
+
+def _metadata_plan(metadata: object) -> str:
+    if not isinstance(metadata, dict):
+        return "pro"
+    p = metadata.get("plan")
+    if p is None or p == "":
+        return "pro"
+    return str(p)
 
 # Map plan names → Stripe Price IDs (set in config / env)
 _PLAN_TO_PRICE: dict[str, str | None] = {
@@ -139,15 +181,19 @@ def create_portal_session(
 # ---------------------------------------------------------------------------
 
 @router.post("/webhook", include_in_schema=False)
-async def stripe_webhook(
-    request: Request,
+def stripe_webhook(
+    payload: bytes = Body(),
     stripe_signature: str = Header(None, alias="stripe-signature"),
     db: Session = Depends(get_db),
 ):
+    """Synchronous route so ``Session = Depends(get_db)`` runs in the same thread as the handler.
+
+    An ``async def`` + sync session combination can leave the ORM in a bad state and return 500.
+    Raw body is read via ``Body()`` instead of ``await request.body()``.
+    """
     if not STRIPE_WEBHOOK_SECRET:
         raise HTTPException(status_code=503, detail="Webhook secret not configured.")
 
-    payload = await request.body()
     try:
         event = stripe.Webhook.construct_event(payload, stripe_signature, STRIPE_WEBHOOK_SECRET)
     except ValueError:
@@ -158,16 +204,20 @@ async def stripe_webhook(
     etype = event["type"]
     data = event["data"]["object"]
 
-    if etype == "checkout.session.completed":
-        _handle_checkout_completed(data, db)
-    elif etype == "customer.subscription.updated":
-        _handle_subscription_updated(data, db)
-    elif etype == "customer.subscription.deleted":
-        _handle_subscription_deleted(data, db)
-    elif etype == "invoice.payment_failed":
-        _handle_payment_failed(data, db)
-    else:
-        logger.debug("Unhandled Stripe event: %s", etype)
+    try:
+        if etype == "checkout.session.completed":
+            _handle_checkout_completed(data, db)
+        elif etype == "customer.subscription.updated":
+            _handle_subscription_updated(data, db)
+        elif etype == "customer.subscription.deleted":
+            _handle_subscription_deleted(data, db)
+        elif etype == "invoice.payment_failed":
+            _handle_payment_failed(data, db)
+        else:
+            logger.debug("Unhandled Stripe event: %s", etype)
+    except Exception:
+        logger.exception("Stripe webhook failed (type=%s)", etype)
+        raise HTTPException(status_code=500, detail="webhook handler failed") from None
 
     return {"received": True}
 
@@ -182,9 +232,9 @@ def _find_account_by_customer(customer_id: str, db: Session) -> Account | None:
 
 def _handle_checkout_completed(session: dict, db: Session) -> None:
     account_id: str | None = session.get("client_reference_id")
-    customer_id: str | None = session.get("customer")
-    subscription_id: str | None = session.get("subscription")
-    plan: str = (session.get("metadata") or {}).get("plan", "pro")
+    customer_id = _stripe_expandable_id(session.get("customer"))
+    subscription_id = _stripe_expandable_id(session.get("subscription"))
+    plan: str = _metadata_plan(session.get("metadata"))
 
     if not account_id:
         logger.warning("checkout.session.completed missing client_reference_id")
@@ -207,7 +257,7 @@ def _handle_checkout_completed(session: dict, db: Session) -> None:
 
 
 def _handle_subscription_updated(sub: dict, db: Session) -> None:
-    customer_id: str | None = sub.get("customer")
+    customer_id = _stripe_expandable_id(sub.get("customer"))
     if not customer_id:
         return
 
@@ -216,9 +266,7 @@ def _handle_subscription_updated(sub: dict, db: Session) -> None:
         logger.warning("subscription.updated: no account found for customer %s", customer_id)
         return
 
-    # Determine tier from price ID
-    items = (sub.get("items") or {}).get("data") or []
-    price_id: str | None = items[0]["price"]["id"] if items else None
+    price_id = _first_subscription_price_id(sub)
     new_tier = _PRICE_TO_PLAN.get(price_id, acc.subscription_tier) if price_id else acc.subscription_tier
 
     new_status: str = sub.get("status", "active")
@@ -240,7 +288,7 @@ def _handle_subscription_updated(sub: dict, db: Session) -> None:
 
 
 def _handle_subscription_deleted(sub: dict, db: Session) -> None:
-    customer_id: str | None = sub.get("customer")
+    customer_id = _stripe_expandable_id(sub.get("customer"))
     if not customer_id:
         return
 
@@ -256,7 +304,7 @@ def _handle_subscription_deleted(sub: dict, db: Session) -> None:
 
 
 def _handle_payment_failed(invoice: dict, db: Session) -> None:
-    customer_id: str | None = invoice.get("customer")
+    customer_id = _stripe_expandable_id(invoice.get("customer"))
     if not customer_id:
         return
 

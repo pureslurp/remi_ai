@@ -10,10 +10,14 @@ import argparse
 import sys
 from pathlib import Path
 
-# Load backend .env
+_BACKEND_ROOT = Path(__file__).resolve().parent.parent
+if str(_BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(_BACKEND_ROOT))
+
+# Load .env (repo root: parent of `backend/`)
 from dotenv import load_dotenv
 
-load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env", override=True)
+load_dotenv(_BACKEND_ROOT.parent / ".env", override=True)
 
 # noqa: E402 — env before backend imports
 from sqlalchemy.orm import Session
