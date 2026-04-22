@@ -91,8 +91,9 @@ def create_checkout_session(
     else:
         session_params["customer_email"] = acc.email or None
 
+    # StripeClient (stripe-python v10+) takes a single `params` dict, not **kwargs
     try:
-        session = sc.checkout.sessions.create(**session_params)
+        session = sc.v1.checkout.sessions.create(params=session_params)
     except stripe.StripeError as e:
         logger.error("Stripe checkout error: %s", e)
         raise HTTPException(status_code=502, detail=f"Stripe error: {e.user_message or str(e)}")
@@ -123,9 +124,8 @@ def create_portal_session(
         )
 
     try:
-        session = sc.billing_portal.sessions.create(
-            customer=customer_id,
-            return_url=FRONTEND_ORIGIN,
+        session = sc.v1.billing_portal.sessions.create(
+            params={"customer": customer_id, "return_url": FRONTEND_ORIGIN},
         )
     except stripe.StripeError as e:
         logger.error("Stripe portal error: %s", e)
