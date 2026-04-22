@@ -7,7 +7,7 @@ from datetime import datetime
 from typing import Literal
 
 import stripe
-from fastapi import APIRouter, Body, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -181,19 +181,20 @@ def create_portal_session(
 # ---------------------------------------------------------------------------
 
 @router.post("/webhook", include_in_schema=False)
-def stripe_webhook(
-    payload: bytes = Body(),
+async def stripe_webhook(
+    request: Request,
     stripe_signature: str = Header(None, alias="stripe-signature"),
     db: Session = Depends(get_db),
 ):
-    """Synchronous route so ``Session = Depends(get_db)`` runs in the same thread as the handler.
+    """Must read the raw request body before signature verification.
 
-    An ``async def`` + sync session combination can leave the ORM in a bad state and return 500.
-    Raw body is read via ``Body()`` instead of ``await request.body()``.
+    Using a typed parameter (bytes/dict/Pydantic) makes FastAPI parse/validate the JSON
+    before we can verify Stripe's signature on the exact bytes Stripe sent.
     """
     if not STRIPE_WEBHOOK_SECRET:
         raise HTTPException(status_code=503, detail="Webhook secret not configured.")
 
+    payload = await request.body()
     try:
         event = stripe.Webhook.construct_event(payload, stripe_signature, STRIPE_WEBHOOK_SECRET)
     except ValueError:
