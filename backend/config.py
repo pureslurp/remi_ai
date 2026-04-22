@@ -10,48 +10,51 @@ from dotenv import load_dotenv
 # when the shell still has an old direct Supabase host but .env was updated to pooler.
 load_dotenv(Path(__file__).parent.parent / ".env", override=True)
 
-# Primary env var is KOVA_HOME; fall back to legacy REMI_HOME so existing
-# deployments with the old var keep booting during rename.
-_kova_home_env = os.environ.get("KOVA_HOME", "").strip()
+# Primary env var is RECO_HOME; fall back to legacy KOVA_HOME and REMI_HOME so existing
+# deployments with old vars keep booting during rename.
+_reco_home_env = os.environ.get("RECO_HOME", "").strip()
+_legacy_kova_home_env = os.environ.get("KOVA_HOME", "").strip()
 _legacy_remi_home_env = os.environ.get("REMI_HOME", "").strip()
-KOVA_HOME = Path(
-    _kova_home_env or _legacy_remi_home_env or str(Path.home() / ".kova")
+RECO_HOME = Path(
+    _reco_home_env or _legacy_kova_home_env or _legacy_remi_home_env or str(Path.home() / ".reco")
 )
 
-# One-time, best-effort migration of ~/.remi -> ~/.kova for local dev users
+# One-time, best-effort migration of legacy data dirs to ~/.reco for local dev users
 # upgrading in place. Never crash startup on a cosmetic rename — the DB is
 # authoritative and failures here just mean the old dir is still around.
-_legacy_home = Path.home() / ".remi"
+_legacy_kova_home = Path.home() / ".kova"
+_legacy_remi_home = Path.home() / ".remi"
 try:
-    if (
-        not _kova_home_env
-        and not _legacy_remi_home_env
-        and _legacy_home.exists()
-        and not KOVA_HOME.exists()
-    ):
-        shutil.move(str(_legacy_home), str(KOVA_HOME))
-        logging.getLogger("kova").info(
-            "Migrated legacy data dir %s -> %s", _legacy_home, KOVA_HOME
-        )
+    if not _reco_home_env and not _legacy_kova_home_env and not _legacy_remi_home_env:
+        if _legacy_kova_home.exists() and not RECO_HOME.exists():
+            shutil.move(str(_legacy_kova_home), str(RECO_HOME))
+            logging.getLogger("reco").info(
+                "Migrated legacy data dir %s -> %s", _legacy_kova_home, RECO_HOME
+            )
+        elif _legacy_remi_home.exists() and not RECO_HOME.exists():
+            shutil.move(str(_legacy_remi_home), str(RECO_HOME))
+            logging.getLogger("reco").info(
+                "Migrated legacy data dir %s -> %s", _legacy_remi_home, RECO_HOME
+            )
 except Exception as _exc:  # noqa: BLE001 — best-effort migration
-    logging.getLogger("kova").warning(
-        "Legacy ~/.remi migration skipped: %s", _exc
-    )
+    logging.getLogger("reco").warning("Legacy data dir migration skipped: %s", _exc)
 
-DB_PATH = KOVA_HOME / "kova.db"
-# If migrated (or legacy install with old DB name), rename remi.db -> kova.db once.
+DB_PATH = RECO_HOME / "reco.db"
+# If migrated from a legacy install, rename old db to reco.db once.
 try:
-    _legacy_db = KOVA_HOME / "remi.db"
-    if _legacy_db.exists() and not DB_PATH.exists():
-        _legacy_db.rename(DB_PATH)
-        logging.getLogger("kova").info("Renamed %s -> %s", _legacy_db, DB_PATH)
+    for _legacy_db_name in ("kova.db", "remi.db"):
+        _legacy_db = RECO_HOME / _legacy_db_name
+        if _legacy_db.exists() and not DB_PATH.exists():
+            _legacy_db.rename(DB_PATH)
+            logging.getLogger("reco").info("Renamed %s -> %s", _legacy_db, DB_PATH)
+            break
 except Exception as _exc:  # noqa: BLE001
-    logging.getLogger("kova").warning("Legacy remi.db rename skipped: %s", _exc)
+    logging.getLogger("reco").warning("Legacy db rename skipped: %s", _exc)
 
-PROJECTS_DIR = KOVA_HOME / "projects"
-CREDENTIALS_PATH = KOVA_HOME / "credentials.json"
-TOKEN_PATH = KOVA_HOME / "google_token.json"
-LOGS_DIR = Path(os.environ.get("LOG_DIR", str(KOVA_HOME / "logs")))
+PROJECTS_DIR = RECO_HOME / "projects"
+CREDENTIALS_PATH = RECO_HOME / "credentials.json"
+TOKEN_PATH = RECO_HOME / "google_token.json"
+LOGS_DIR = Path(os.environ.get("LOG_DIR", str(RECO_HOME / "logs")))
 
 # Prefer DATABASE_URL (e.g. Supabase Postgres). Falls back to local SQLite.
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip() or None
@@ -155,11 +158,20 @@ MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "4096") or "4096")
 # Example: 3M billable units at ~$8/M blended → ~$24 COGS/month before overage.
 #
 TRIAL_MAX_DAYS = int(os.environ.get("TRIAL_MAX_DAYS", "14") or "14")
+# Free / trial tier: lifetime token cap (not monthly — no billing relationship)
 TRIAL_MAX_TOKENS = int(os.environ.get("TRIAL_MAX_TOKENS", "500000") or "500000")
+FREE_MAX_TOKENS = TRIAL_MAX_TOKENS  # alias; "trial" and "free" share the same cap
+# Paid tier monthly allowances (billable units = input + output × OUTPUT_TOKEN_QUOTA_MULTIPLIER)
 PRO_INCLUDED_TOKENS_PER_MONTH = int(
     os.environ.get("PRO_INCLUDED_TOKENS_PER_MONTH", "2000000") or "2000000"
 )
-# Each output token counts this many times toward trial/pro caps (input tokens count as 1×).
+MAX_INCLUDED_TOKENS_PER_MONTH = int(
+    os.environ.get("MAX_INCLUDED_TOKENS_PER_MONTH", "6000000") or "6000000"
+)
+ULTRA_INCLUDED_TOKENS_PER_MONTH = int(
+    os.environ.get("ULTRA_INCLUDED_TOKENS_PER_MONTH", "10000000") or "10000000"
+)
+# Each output token counts this many times toward caps (input tokens count as 1×).
 OUTPUT_TOKEN_QUOTA_MULTIPLIER = float(os.environ.get("OUTPUT_TOKEN_QUOTA_MULTIPLIER", "3.0") or "3.0")
 # Comma-separated emails that bypass all token quotas (admin accounts).
 ADMIN_EMAILS: frozenset[str] = frozenset(
@@ -167,6 +179,14 @@ ADMIN_EMAILS: frozenset[str] = frozenset(
 )
 # Optional: shown in 402 responses and GET /api/account/entitlements (Stripe checkout or marketing URL)
 UPGRADE_CHECKOUT_URL = os.environ.get("UPGRADE_CHECKOUT_URL", "").strip() or None
+
+# --- Stripe ---
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip() or None
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip() or None
+# Stripe Price IDs for each paid plan (create in Stripe dashboard → Products)
+STRIPE_PRICE_PRO = os.environ.get("STRIPE_PRICE_PRO", "").strip() or None
+STRIPE_PRICE_MAX = os.environ.get("STRIPE_PRICE_MAX", "").strip() or None
+STRIPE_PRICE_ULTRA = os.environ.get("STRIPE_PRICE_ULTRA", "").strip() or None
 MAX_UPLOAD_SIZE_MB = 20
 MAX_UPLOAD_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 
@@ -240,7 +260,7 @@ def _post_google_oauth_browser_redirect_origin() -> str:
 
 POST_GOOGLE_OAUTH_FRONTEND_ORIGIN = _post_google_oauth_browser_redirect_origin()
 
-# Web OAuth (production) — if set, used instead of ~/.kova/credentials.json
+# Web OAuth (production) — if set, used instead of ~/.reco/credentials.json
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID", "").strip() or None
 GOOGLE_CLIENT_SECRET = os.environ.get("GOOGLE_CLIENT_SECRET", "").strip() or None
 
@@ -269,7 +289,7 @@ if FRONTEND_ORIGIN and FRONTEND_ORIGIN not in _seen_cors:
     CORS_ORIGINS.append(FRONTEND_ORIGIN)
 
 # Optional extra allowed Origin values (Starlette regex). Use for many Vercel preview URLs
-# without listing each one, e.g. r"https://kova[-\w]*\.vercel\.app"
+# without listing each one, e.g. r"https://reco[-\w]*\.vercel\.app"
 # Validate at import: an invalid regex would otherwise crash *every* request when
 # Starlette lazily compiles it inside CORSMiddleware.__init__ on first use.
 import re as _re
@@ -283,7 +303,7 @@ if _cors_regex:
     except _re.error as _exc:
         import logging as _logging
 
-        _logging.getLogger("kova").error(
+        _logging.getLogger("reco").error(
             "CORS_ORIGIN_REGEX %r is not a valid Python regex (%s). Ignoring it. "
             "Use a regex like r'https://your-app[-\\w]*\\.vercel\\.app' (NOT a glob like *.vercel.app).",
             _cors_regex,
@@ -292,13 +312,13 @@ if _cors_regex:
 
 # Ensure runtime dirs exist (local / SQLite mode)
 if not is_postgres():
-    for _dir in (KOVA_HOME, PROJECTS_DIR, LOGS_DIR):
+    for _dir in (RECO_HOME, PROJECTS_DIR, LOGS_DIR):
         _dir.mkdir(parents=True, exist_ok=True)
 else:
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 # Multi-tenant session (Postgres + Google). SQLite uses implicit LOCAL_ACCOUNT_ID only.
 LOCAL_ACCOUNT_ID = "local"
-SESSION_COOKIE_NAME = os.environ.get("SESSION_COOKIE_NAME", "kova_session").strip() or "kova_session"
+SESSION_COOKIE_NAME = os.environ.get("SESSION_COOKIE_NAME", "reco_session").strip() or "reco_session"
 SESSION_SECRET = os.environ.get("SESSION_SECRET", "").strip() or None
 SESSION_TTL_DAYS = int(os.environ.get("SESSION_TTL_DAYS", "14") or "14")

@@ -17,7 +17,7 @@ config.set_main_option("sqlalchemy.url", escaped)
 
 if config.config_file_name is not None:
     # disable_existing_loggers=False is critical: the default True wipes the
-    # 'kova' / 'uvicorn.error' loggers, hiding every log line after migrations
+    # 'reco' / 'uvicorn.error' loggers, hiding every log line after migrations
     # run (including the uvicorn 'Started server process' banner).
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 

@@ -1,3 +1,5 @@
+import { RecoMark } from './RecoMark'
+
 export default function PrivacyPolicy() {
   return (
     <div
@@ -9,10 +11,8 @@ export default function PrivacyPolicy() {
       <header className="border-b border-white/[0.06] bg-[rgb(24_24_27_/0.82)] backdrop-blur-lg">
         <div className="mx-auto flex max-w-3xl items-center gap-4 px-5 py-4 sm:px-8">
           <a href="/" className="flex items-center gap-3 hover:opacity-80 transition">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-gradient-to-br from-brand-navy to-brand-slate">
-              <span className="font-landing-display text-lg font-semibold tracking-tight text-brand-cloud">K</span>
-            </div>
-            <span className="font-landing-display text-xl font-semibold tracking-tight text-brand-cloud">Kova</span>
+            <RecoMark variant="legal" />
+            <span className="font-landing-display text-xl font-semibold tracking-tight text-brand-cloud">Reco</span>
           </a>
         </div>
       </header>
@@ -21,15 +21,23 @@ export default function PrivacyPolicy() {
         <h1 className="font-landing-display text-4xl font-semibold tracking-tight text-brand-cloud sm:text-5xl">
           Privacy Policy
         </h1>
-        <p className="mt-3 text-sm text-brand-cloud/45">Last updated: April 20, 2026</p>
+        <p className="mt-3 text-sm text-brand-cloud/45">Last updated: April 21, 2026</p>
 
         <div className="mt-12 space-y-10 text-sm leading-relaxed text-brand-cloud/70">
 
           <section>
             <h2 className="font-landing-display text-xl font-semibold text-brand-cloud mb-3">Overview</h2>
             <p>
-              Kova is a real estate AI assistant that helps agents manage client workspaces, documents, email threads,
+              Reco is a real estate AI assistant that helps agents manage client workspaces, documents, email threads,
               and deal timelines. This policy explains what data we collect, how we use it, and your rights as a user.
+            </p>
+            <p className="mt-3">
+              Contractual obligations for lawful use of synced or imported data (including permissions from third
+              parties) are set out in our{' '}
+              <a href="/terms" className="text-brand-mint hover:text-brand-cloud transition underline underline-offset-2">
+                Terms of Service
+              </a>
+              .
             </p>
           </section>
 
@@ -41,19 +49,19 @@ export default function PrivacyPolicy() {
                 Google we receive your name, email address, and profile picture via Google OAuth.
               </li>
               <li>
-                <span className="text-brand-cloud/90 font-medium">Gmail data</span> — If you connect Gmail, Kova reads
+                <span className="text-brand-cloud/90 font-medium">Gmail data</span> — If you connect Gmail, Reco reads
                 email threads associated with your clients. We store thread subjects, participant addresses, message
                 dates, and body text in your account. We request read-only access and the ability to compose drafts.
                 We do not send emails on your behalf without your explicit action.
               </li>
               <li>
                 <span className="text-brand-cloud/90 font-medium">Google Drive data</span> — If you connect a Drive
-                folder, Kova reads the files in that folder (PDFs, DOCX, TXT) to answer questions about your clients.
+                folder, Reco reads the files in that folder (PDFs, DOCX, TXT) to answer questions about your clients.
                 We request read-only access. We do not modify or delete your Drive files.
               </li>
               <li>
                 <span className="text-brand-cloud/90 font-medium">Client workspace data</span> — Notes, transaction
-                details, property information, and uploaded documents you add to Kova are stored and associated with
+                details, property information, and uploaded documents you add to Reco are stored and associated with
                 your account.
               </li>
               <li>
@@ -66,7 +74,7 @@ export default function PrivacyPolicy() {
           <section>
             <h2 className="font-landing-display text-xl font-semibold text-brand-cloud mb-3">How we use your data</h2>
             <ul className="space-y-3">
-              <li>To provide the Kova service — powering AI chat responses with context from your client files, emails, and documents.</li>
+              <li>To provide the Reco service — powering AI chat responses with context from your client files, emails, and documents.</li>
               <li>To authenticate your session and associate your data with your account.</li>
               <li>To enforce subscription limits and process billing.</li>
               <li>To improve reliability and debug issues (server logs, error traces).</li>
@@ -109,16 +117,16 @@ export default function PrivacyPolicy() {
 
           <section>
             <h2 className="font-landing-display text-xl font-semibold text-brand-cloud mb-3">Google API scopes</h2>
-            <p>Kova requests the following Google OAuth scopes:</p>
+            <p>Reco requests the following Google OAuth scopes:</p>
             <ul className="mt-3 space-y-2 font-mono text-xs text-brand-cloud/60">
               <li className="rounded-lg bg-white/[0.04] px-3 py-2">gmail.readonly — read email threads associated with your clients</li>
-              <li className="rounded-lg bg-white/[0.04] px-3 py-2">gmail.compose — create draft replies from within Kova</li>
+              <li className="rounded-lg bg-white/[0.04] px-3 py-2">gmail.compose — create draft replies from within Reco</li>
               <li className="rounded-lg bg-white/[0.04] px-3 py-2">drive.readonly — read files in a folder you designate for a client</li>
               <li className="rounded-lg bg-white/[0.04] px-3 py-2">userinfo.email — identify your account</li>
               <li className="rounded-lg bg-white/[0.04] px-3 py-2">openid — authenticate your session</li>
             </ul>
             <p className="mt-4">
-              Kova's use of data obtained from Google APIs adheres to the{' '}
+              Reco's use of data obtained from Google APIs adheres to the{' '}
               <a
                 href="https://developers.google.com/terms/api-services-user-data-policy"
                 target="_blank"
@@ -143,7 +151,7 @@ export default function PrivacyPolicy() {
           <section>
             <h2 className="font-landing-display text-xl font-semibold text-brand-cloud mb-3">Children's privacy</h2>
             <p>
-              Kova is intended for professional use by real estate agents and is not directed at children under 13. We
+              Reco is intended for professional use by real estate agents and is not directed at children under 13. We
               do not knowingly collect personal information from children.
             </p>
           </section>
@@ -152,7 +160,7 @@ export default function PrivacyPolicy() {
             <h2 className="font-landing-display text-xl font-semibold text-brand-cloud mb-3">Changes to this policy</h2>
             <p>
               We may update this policy from time to time. When we do, we will update the "Last updated" date at the
-              top of this page. Continued use of Kova after changes constitutes acceptance of the updated policy.
+              top of this page. Continued use of Reco after changes constitutes acceptance of the updated policy.
             </p>
           </section>
 
@@ -175,7 +183,7 @@ export default function PrivacyPolicy() {
 
       <footer className="border-t border-white/[0.06] px-5 py-8 sm:px-8">
         <div className="mx-auto max-w-3xl text-center text-xs text-brand-cloud/40">
-          <p className="font-landing-display text-sm text-brand-cloud/50">Kova</p>
+          <p className="font-landing-display text-sm text-brand-cloud/50">Reco</p>
           <p className="mt-2">
             <a href="/" className="hover:text-brand-cloud/70 transition">← Back to home</a>
           </p>

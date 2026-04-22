@@ -20,7 +20,7 @@ from sqlalchemy import text
 _log_handlers = [logging.StreamHandler()]
 try:
     LOGS_DIR.mkdir(parents=True, exist_ok=True)
-    _log_handlers.append(logging.FileHandler(LOGS_DIR / "kova.log"))
+    _log_handlers.append(logging.FileHandler(LOGS_DIR / "reco.log"))
 except OSError:
     pass
 
@@ -30,7 +30,7 @@ logging.basicConfig(
     handlers=_log_handlers,
     force=True,
 )
-logger = logging.getLogger("kova")
+logger = logging.getLogger("reco")
 
 from database import engine, Base
 import models  # ensure all ORM models are registered
@@ -150,6 +150,18 @@ def _bootstrap_sqlite() -> None:
                         text("ALTER TABLE accounts ADD COLUMN pro_tokens_used INTEGER DEFAULT 0")
                     )
                     conn.commit()
+                if "stripe_customer_id" not in acols:
+                    conn.execute(text("ALTER TABLE accounts ADD COLUMN stripe_customer_id VARCHAR"))
+                    conn.commit()
+                if "stripe_subscription_id" not in acols:
+                    conn.execute(text("ALTER TABLE accounts ADD COLUMN stripe_subscription_id VARCHAR"))
+                    conn.commit()
+                if "subscription_status" not in acols:
+                    conn.execute(text("ALTER TABLE accounts ADD COLUMN subscription_status VARCHAR"))
+                    conn.commit()
+                if "subscription_current_period_end" not in acols:
+                    conn.execute(text("ALTER TABLE accounts ADD COLUMN subscription_current_period_end DATETIME"))
+                    conn.commit()
             acols = {row[1] for row in conn.execute(text("PRAGMA table_info(projects)")).fetchall()}
             if acols and "owner_id" not in acols:
                 conn.execute(text("ALTER TABLE projects ADD COLUMN owner_id VARCHAR"))
@@ -208,7 +220,7 @@ if is_postgres():
 else:
     _bootstrap_sqlite()
 
-from routers import account, projects, properties, transactions, documents, chat, auth, gmail, drive, llm
+from routers import account, projects, properties, transactions, documents, chat, auth, gmail, drive, llm, billing
 
 
 class ApiNoCacheMiddleware:
@@ -249,7 +261,7 @@ class ApiNoCacheMiddleware:
         await self.app(scope, receive, send_wrapper)
 
 
-app = FastAPI(title="Kova", version="1.0.0")
+app = FastAPI(title="Reco", version="1.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -289,6 +301,7 @@ app.include_router(chat.router)
 app.include_router(auth.router)
 app.include_router(gmail.router)
 app.include_router(drive.router)
+app.include_router(billing.router)
 
 
 @app.get("/api/health")
@@ -301,7 +314,8 @@ def health():
     if not DB_INIT_STATUS.get("ok") and DB_INIT_STATUS.get("error"):
         out["db_init_error"] = DB_INIT_STATUS["error"]
     _debug_flag = (
-        os.environ.get("KOVA_DEBUG", "").strip()
+        os.environ.get("RECO_DEBUG", "").strip()
+        or os.environ.get("KOVA_DEBUG", "").strip()  # legacy
         or os.environ.get("REMIP_DEBUG", "").strip()
     )
     if _debug_flag.lower() in ("1", "true", "yes"):

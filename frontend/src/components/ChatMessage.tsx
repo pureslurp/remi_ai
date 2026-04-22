@@ -19,7 +19,7 @@ export default function ChatMessageBubble({ message }: Props) {
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
       {!isUser && (
         <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center text-xs font-semibold text-brand-cloud mr-2 mt-1 shrink-0 tracking-tight">
-          K
+          R
         </div>
       )}
       <div

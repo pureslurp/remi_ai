@@ -39,8 +39,10 @@ export type LlmOptionsResponse = {
   subscription_tier?: string
 }
 
+export type SubscriptionTier = 'free' | 'trial' | 'pro' | 'max' | 'ultra'
+
 export type AccountEntitlements = {
-  subscription_tier: 'trial' | 'pro'
+  subscription_tier: SubscriptionTier
   trial_max_tokens: number
   trial_tokens_used: number
   trial_tokens_remaining: number
@@ -55,6 +57,8 @@ export type AccountEntitlements = {
   upgrade_url: string | null
   /** Output tokens count this many times toward caps (input = 1×). */
   quota_output_multiplier?: number
+  subscription_status: 'active' | 'past_due' | 'canceled' | 'trialing' | null
+  subscription_current_period_end: string | null
 }
 
 export interface Property {

@@ -1,4 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect width="32" height="32" rx="6" fill="#1a365d"/>
-  <text x="16" y="23" text-anchor="middle" fill="#48bb78" font-family="system-ui,sans-serif" font-size="17" font-weight="600">K</text>
+  <defs>
+    <linearGradient id="reco-tile" x1="0" y1="0" x2="32" y2="32" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="rgb(24, 24, 27)"/>
+      <stop offset="100%" stop-color="rgb(63, 63, 70)"/>
+    </linearGradient>
+    <filter id="reco-shadow" x="-35%" y="-35%" width="170%" height="170%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgb(0,0,0)" flood-opacity="0.25"/>
+    </filter>
+  </defs>
+  <rect
+    width="32"
+    height="32"
+    rx="9"
+    fill="url(#reco-tile)"
+    stroke="rgba(255,255,255,0.1)"
+    stroke-width="1"
+    filter="url(#reco-shadow)"
+  />
+  <text
+    x="16"
+    y="16.5"
+    text-anchor="middle"
+    dominant-baseline="central"
+    fill="rgb(244, 244, 245)"
+    font-family="&quot;Cormorant Garamond&quot;, Georgia, serif"
+    font-size="15"
+    font-weight="600"
+    letter-spacing="-0.02em"
+  >R</text>
 </svg>

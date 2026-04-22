@@ -10,7 +10,7 @@ from models import Document, DocumentChunk
 from config import PROJECTS_DIR
 from services import object_storage
 
-logger = logging.getLogger("kova.docs")
+logger = logging.getLogger("reco.docs")
 
 
 def _pg_safe_text(s: str) -> str:

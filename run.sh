@@ -3,7 +3,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-echo "=== Kova ==="
+echo "=== Reco ==="
 
 # Check for API key
 if ! grep -q "ANTHROPIC_API_KEY=sk-" "$SCRIPT_DIR/.env" 2>/dev/null; then
@@ -40,7 +40,7 @@ FRONTEND_PID=$!
 
 sleep 2
 echo ""
-echo "✅ Kova is running!"
+echo "✅ Reco is running!"
 echo "   Open: http://localhost:5173"
 echo "   Press Ctrl+C to stop"
 echo ""
@@ -49,6 +49,6 @@ echo ""
 open "http://localhost:5173" 2>/dev/null || true
 
 # Cleanup on exit
-trap "echo ''; echo 'Stopping Kova...'; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit 0" INT TERM
+trap "echo ''; echo 'Stopping Reco...'; kill $BACKEND_PID $FRONTEND_PID 2>/dev/null; exit 0" INT TERM
 
 wait $BACKEND_PID $FRONTEND_PID

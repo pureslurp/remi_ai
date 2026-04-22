@@ -109,7 +109,7 @@ export default function SystemPromptSettings({ open, onClose }: Props) {
           </h2>
           <p className="text-xs text-brand-cloud/55 mt-1 leading-relaxed">
             Defaults follow your client&apos;s transaction type (buying, selling, or both). Edit below to
-            override your account defaults; Kova still receives client context, documents, and emails in
+            override your account defaults; Reco still receives client context, documents, and emails in
             addition to this guidance.
           </p>
         </div>

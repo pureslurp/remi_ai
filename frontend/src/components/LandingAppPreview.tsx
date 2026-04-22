@@ -733,7 +733,7 @@ export default function LandingAppPreview() {
       <div
         className="overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-2xl ring-1 ring-white/5"
         role="region"
-        aria-label="Kova workspace layout preview"
+        aria-label="Reco workspace layout preview"
       >
         <div className="flex items-center gap-2 border-b border-white/5 bg-black/35 px-3 py-2">
           <span className="h-2.5 w-2.5 rounded-full bg-red-400/70" aria-hidden />
@@ -748,9 +748,9 @@ export default function LandingAppPreview() {
             <div className="shrink-0 border-b border-white/5 p-3">
               <div className="mb-2 flex items-center gap-2">
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-gradient-to-br from-brand-navy to-brand-slate">
-                  <span className="text-[10px] font-semibold tracking-tight text-brand-cloud">K</span>
+                  <span className="text-[10px] font-semibold tracking-tight text-brand-cloud">R</span>
                 </div>
-                <span className="truncate font-display text-sm font-semibold tracking-tight text-brand-cloud">Kova</span>
+                <span className="truncate font-display text-sm font-semibold tracking-tight text-brand-cloud">Reco</span>
               </div>
               <div className="rounded-lg border border-white/10 bg-white/[0.05] py-1.5 text-center text-[10px] font-medium text-brand-cloud/70">
                 + New Client
@@ -794,7 +794,7 @@ export default function LandingAppPreview() {
           <div className="flex min-w-0 flex-1 flex-col border-x border-white/5">
             <div className="shrink-0 border-b border-white/5 bg-black/20 px-4 py-2.5">
               <h3 className="text-[12px] font-semibold tracking-tight text-brand-cloud">{client.name}</h3>
-              <p className="mt-0.5 text-[9px] uppercase tracking-[0.15em] text-brand-cloud/40">Kova Assistant</p>
+              <p className="mt-0.5 text-[9px] uppercase tracking-[0.15em] text-brand-cloud/40">Reco Pilot</p>
             </div>
             <div
               ref={chatScrollRef}
@@ -812,7 +812,7 @@ export default function LandingAppPreview() {
                 ) : (
                   <div key={idx} className="flex justify-start">
                     <div className="mr-1.5 mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-gradient-to-br from-brand-navy to-brand-slate text-[9px] font-semibold tracking-tight text-brand-cloud">
-                      K
+                      R
                     </div>
                     <div className="min-w-0 max-w-[92%] rounded-2xl rounded-bl-sm border border-white/10 bg-white/[0.03] px-3 py-2 text-brand-cloud/90 backdrop-blur-sm">
                       <ReactMarkdown
@@ -829,7 +829,7 @@ export default function LandingAppPreview() {
             </div>
             <div className="shrink-0 border-t border-white/5 bg-black/20 px-3 py-2">
               <div className="flex items-end gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 backdrop-blur-sm">
-                <div className="flex-1 py-0.5 text-[10px] text-brand-cloud/35">Ask Kova about this client…</div>
+                <div className="flex-1 py-0.5 text-[10px] text-brand-cloud/35">Ask Reco about this client…</div>
                 <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-brand-mint/50" aria-hidden>
                   <svg className="h-3 w-3 rotate-90 text-brand-navy/60" fill="currentColor" viewBox="0 0 24 24">
                     <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
@@ -919,7 +919,7 @@ export default function LandingAppPreview() {
         >
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-brand-cloud/45">Why it feels grounded</p>
           <p className="text-[11px] leading-relaxed text-brand-cloud/60">
-            Kova builds prompts from the same objects you see in the right rail: message subjects from synced email, file names from
+            Reco builds prompts from the same objects you see in the right rail: message subjects from synced email, file names from
             folder sync and uploads, plus deal dates. The assistant is nudged to <strong className="text-brand-cloud/80">name those sources</strong> when it reasons — so you can
             verify fast.
           </p>

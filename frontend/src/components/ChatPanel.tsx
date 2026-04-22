@@ -127,7 +127,7 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
     <div className="flex flex-col h-full">
       <div className="px-6 py-4 border-b border-white/5 bg-black/20">
         <h2 className="font-semibold text-brand-cloud tracking-tight">{projectName}</h2>
-        <p className="text-[11px] uppercase tracking-[0.15em] text-brand-cloud/40 mt-0.5">Kova Assistant</p>
+        <p className="text-[11px] uppercase tracking-[0.15em] text-brand-cloud/40 mt-0.5">Reco Pilot</p>
         {entitlements && !entitlements.can_send_chat && (
           <p className="mt-2 text-[11px] text-amber-200/90 leading-relaxed">
             You’ve reached your token allowance for now. Upgrade to Pro or add usage to keep chatting.
@@ -152,10 +152,10 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
         {messages.length === 0 && !isStreaming && (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center text-2xl font-semibold text-brand-cloud tracking-tight mb-4">
-              K
+              R
             </div>
             <p className="text-brand-cloud/70 text-sm">
-              Ask Kova anything about <span className="text-brand-cloud font-medium">{projectName}</span>
+              Ask Reco anything about <span className="text-brand-cloud font-medium">{projectName}</span>
             </p>
             <p className="text-brand-cloud/40 text-xs mt-1">
               Offers, negotiations, purchase agreements, market analysis…
@@ -169,7 +169,7 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
         {isStreaming && !streamingContent && (
           <div className="flex justify-start mb-4">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center text-xs font-semibold text-brand-cloud mr-2 shrink-0">
-              K
+              R
             </div>
             <div className="bg-white/[0.03] backdrop-blur-sm border border-white/10 rounded-2xl rounded-bl-sm px-4 py-3">
               <div className="flex gap-1">
@@ -191,7 +191,7 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             disabled={isStreaming || !canSendChat}
-            placeholder="Ask Kova about this client… (Enter to send, Shift+Enter for newline)"
+            placeholder="Ask Reco about this client… (Enter to send, Shift+Enter for newline)"
             rows={1}
             className="flex-1 bg-transparent resize-none outline-none text-sm text-brand-cloud placeholder-brand-cloud/35 py-1 max-h-[150px] disabled:opacity-50"
           />
