@@ -239,6 +239,21 @@ def _find_account_by_customer(customer_id: str, db: Session) -> Account | None:
     return db.query(Account).filter(Account.stripe_customer_id == customer_id).first()
 
 
+def _current_period_end_unix_from_subscription_dict(raw: dict) -> int | None:
+    """Newer Stripe API versions put ``current_period_end`` on each line item, not the subscription root."""
+    ts = raw.get("current_period_end")
+    if ts is not None:
+        return int(ts)
+    items = raw.get("items")
+    if not isinstance(items, dict):
+        return None
+    data = items.get("data") or []
+    if not data or not isinstance(data, list) or not isinstance(data[0], dict):
+        return None
+    line_ts = data[0].get("current_period_end")
+    return int(line_ts) if line_ts is not None else None
+
+
 def _fetch_subscription_current_period_end(subscription_id: str | None) -> datetime | None:
     """Stripe checkout.session does not include subscription period; retrieve the Subscription."""
     if not subscription_id or not STRIPE_SECRET_KEY:
@@ -252,7 +267,10 @@ def _fetch_subscription_current_period_end(subscription_id: str | None) -> datet
     raw = sub.to_dict() if hasattr(sub, "to_dict") else sub
     if not isinstance(raw, dict):
         return None
-    ts = raw.get("current_period_end")
+    try:
+        ts = _current_period_end_unix_from_subscription_dict(raw)
+    except (TypeError, ValueError):
+        return None
     if ts is None:
         return None
     try:
@@ -310,7 +328,10 @@ def _handle_subscription_updated(sub: dict, db: Session) -> None:
     new_tier = _PRICE_TO_PLAN.get(price_id, acc.subscription_tier) if price_id else acc.subscription_tier
 
     new_status: str = sub.get("status", "active")
-    period_end_ts = sub.get("current_period_end")
+    try:
+        period_end_ts = _current_period_end_unix_from_subscription_dict(sub)
+    except (TypeError, ValueError):
+        period_end_ts = None
     period_end = datetime.utcfromtimestamp(period_end_ts) if period_end_ts else None
 
     # If plan changed, reset usage counter for the new period
