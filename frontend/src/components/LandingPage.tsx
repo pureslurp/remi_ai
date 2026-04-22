@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import * as api from '../api/client'
 import { useGoogleOAuthRedirect } from '../hooks/useGoogleOAuthRedirect'
 import LandingAppPreview from './LandingAppPreview'
+import { RecoMark } from './RecoMark'
 
 type Props = {
   /** Reserved: server linked Google but this browser has not completed OAuth. */
@@ -89,6 +90,12 @@ function AuthModal({ mode, initialPlan = 'free', onClose, onModeChange, onEmailA
     try {
       if (mode === 'signup') {
         await api.signup({ email, password, name: name || undefined })
+        // If a paid plan was chosen, redirect to Stripe Checkout immediately after account creation
+        if (selectedPlan !== 'free') {
+          const { url } = await api.createCheckoutSession(selectedPlan as 'pro' | 'max' | 'ultra')
+          window.location.href = url
+          return // don't call onEmailAuth — Stripe will redirect back
+        }
       } else {
         await api.login({ email, password })
       }
@@ -104,6 +111,14 @@ function AuthModal({ mode, initialPlan = 'free', onClose, onModeChange, onEmailA
     } finally {
       setEmailBusy(false)
     }
+  }
+
+  const handleGoogleAuth = () => {
+    // If signing up with a paid plan, save it so we can redirect to checkout after OAuth completes
+    if (mode === 'signup' && selectedPlan !== 'free') {
+      sessionStorage.setItem('pendingPlan', selectedPlan)
+    }
+    startGoogleAuth()
   }
 
   return (
@@ -174,7 +189,7 @@ function AuthModal({ mode, initialPlan = 'free', onClose, onModeChange, onEmailA
         {/* Google — recommended */}
         <button
           type="button"
-          onClick={startGoogleAuth}
+          onClick={handleGoogleAuth}
           disabled={busy}
           className="mt-5 w-full inline-flex items-center justify-center gap-2.5 rounded-xl bg-white/[0.07] border border-white/15 px-4 py-3 text-sm font-semibold text-brand-cloud transition hover:bg-white/[0.12] disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -383,9 +398,7 @@ export default function LandingPage({ needsDeviceLink, onEmailAuth }: Props) {
       <header className="sticky top-0 z-[110] border-b border-white/[0.06] bg-[rgb(24_24_27_/0.82)] backdrop-blur-lg backdrop-saturate-150">
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
           <div className="landing-rise flex items-center gap-3" style={{ animationDelay: '0ms' }}>
-            <div className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/10 bg-gradient-to-br from-brand-navy to-brand-slate shadow-lg shadow-black/25">
-              <span className="font-landing-display text-xl font-semibold tracking-tight text-brand-cloud">R</span>
-            </div>
+            <RecoMark variant="landing" />
             <span className="font-landing-display text-2xl font-semibold tracking-tight text-brand-cloud">Reco</span>
           </div>
           <nav className="landing-rise flex items-center gap-2 sm:gap-3" style={{ animationDelay: '60ms' }} aria-label="Account">
@@ -398,7 +411,7 @@ export default function LandingPage({ needsDeviceLink, onEmailAuth }: Props) {
             </button>
             <button
               type="button"
-              onClick={openSignup}
+              onClick={() => openSignup()}
               className="rounded-lg bg-brand-cloud px-3 py-2 text-sm font-semibold text-brand-navy shadow-md shadow-black/20 transition hover:bg-white"
             >
               Sign up
@@ -447,7 +460,7 @@ export default function LandingPage({ needsDeviceLink, onEmailAuth }: Props) {
             >
               <button
                 type="button"
-                onClick={openSignup}
+                onClick={() => openSignup()}
                 className="inline-flex items-center justify-center rounded-xl bg-brand-cloud px-6 py-3.5 text-sm font-semibold text-brand-navy shadow-lg shadow-black/25 transition hover:bg-white motion-reduce:transition-none"
               >
                 Get started free

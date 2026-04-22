@@ -150,6 +150,18 @@ def _bootstrap_sqlite() -> None:
                         text("ALTER TABLE accounts ADD COLUMN pro_tokens_used INTEGER DEFAULT 0")
                     )
                     conn.commit()
+                if "stripe_customer_id" not in acols:
+                    conn.execute(text("ALTER TABLE accounts ADD COLUMN stripe_customer_id VARCHAR"))
+                    conn.commit()
+                if "stripe_subscription_id" not in acols:
+                    conn.execute(text("ALTER TABLE accounts ADD COLUMN stripe_subscription_id VARCHAR"))
+                    conn.commit()
+                if "subscription_status" not in acols:
+                    conn.execute(text("ALTER TABLE accounts ADD COLUMN subscription_status VARCHAR"))
+                    conn.commit()
+                if "subscription_current_period_end" not in acols:
+                    conn.execute(text("ALTER TABLE accounts ADD COLUMN subscription_current_period_end DATETIME"))
+                    conn.commit()
             acols = {row[1] for row in conn.execute(text("PRAGMA table_info(projects)")).fetchall()}
             if acols and "owner_id" not in acols:
                 conn.execute(text("ALTER TABLE projects ADD COLUMN owner_id VARCHAR"))
@@ -208,7 +220,7 @@ if is_postgres():
 else:
     _bootstrap_sqlite()
 
-from routers import account, projects, properties, transactions, documents, chat, auth, gmail, drive, llm
+from routers import account, projects, properties, transactions, documents, chat, auth, gmail, drive, llm, billing
 
 
 class ApiNoCacheMiddleware:
@@ -289,6 +301,7 @@ app.include_router(chat.router)
 app.include_router(auth.router)
 app.include_router(gmail.router)
 app.include_router(drive.router)
+app.include_router(billing.router)
 
 
 @app.get("/api/health")

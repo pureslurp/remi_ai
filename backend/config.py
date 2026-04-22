@@ -158,11 +158,20 @@ MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "4096") or "4096")
 # Example: 3M billable units at ~$8/M blended → ~$24 COGS/month before overage.
 #
 TRIAL_MAX_DAYS = int(os.environ.get("TRIAL_MAX_DAYS", "14") or "14")
+# Free / trial tier: lifetime token cap (not monthly — no billing relationship)
 TRIAL_MAX_TOKENS = int(os.environ.get("TRIAL_MAX_TOKENS", "500000") or "500000")
+FREE_MAX_TOKENS = TRIAL_MAX_TOKENS  # alias; "trial" and "free" share the same cap
+# Paid tier monthly allowances (billable units = input + output × OUTPUT_TOKEN_QUOTA_MULTIPLIER)
 PRO_INCLUDED_TOKENS_PER_MONTH = int(
     os.environ.get("PRO_INCLUDED_TOKENS_PER_MONTH", "2000000") or "2000000"
 )
-# Each output token counts this many times toward trial/pro caps (input tokens count as 1×).
+MAX_INCLUDED_TOKENS_PER_MONTH = int(
+    os.environ.get("MAX_INCLUDED_TOKENS_PER_MONTH", "6000000") or "6000000"
+)
+ULTRA_INCLUDED_TOKENS_PER_MONTH = int(
+    os.environ.get("ULTRA_INCLUDED_TOKENS_PER_MONTH", "10000000") or "10000000"
+)
+# Each output token counts this many times toward caps (input tokens count as 1×).
 OUTPUT_TOKEN_QUOTA_MULTIPLIER = float(os.environ.get("OUTPUT_TOKEN_QUOTA_MULTIPLIER", "3.0") or "3.0")
 # Comma-separated emails that bypass all token quotas (admin accounts).
 ADMIN_EMAILS: frozenset[str] = frozenset(
@@ -170,6 +179,14 @@ ADMIN_EMAILS: frozenset[str] = frozenset(
 )
 # Optional: shown in 402 responses and GET /api/account/entitlements (Stripe checkout or marketing URL)
 UPGRADE_CHECKOUT_URL = os.environ.get("UPGRADE_CHECKOUT_URL", "").strip() or None
+
+# --- Stripe ---
+STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "").strip() or None
+STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip() or None
+# Stripe Price IDs for each paid plan (create in Stripe dashboard → Products)
+STRIPE_PRICE_PRO = os.environ.get("STRIPE_PRICE_PRO", "").strip() or None
+STRIPE_PRICE_MAX = os.environ.get("STRIPE_PRICE_MAX", "").strip() or None
+STRIPE_PRICE_ULTRA = os.environ.get("STRIPE_PRICE_ULTRA", "").strip() or None
 MAX_UPLOAD_SIZE_MB = 20
 MAX_UPLOAD_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 

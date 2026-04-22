@@ -38,6 +38,7 @@ async function req<T>(path: string, opts?: RequestInit): Promise<T> {
     ...restOpts,
     credentials: 'include',
     headers: merged,
+    ...(path === '/auth/session' ? { cache: 'no-store' as RequestCache } : {}),
   })
   if (!res.ok) {
     const text = await res.text()
@@ -134,7 +135,14 @@ export const login = (data: { email: string; password: string }) =>
 
 export type SessionStatus = {
   authenticated: boolean
-  account?: { email: string; name?: string; picture?: string; auth_provider: string }
+  account?: {
+    email: string
+    name?: string
+    picture?: string
+    auth_provider: string
+    subscription_tier?: string
+    stripe_customer_id?: string | null
+  }
   google_connected?: boolean
 }
 
@@ -178,3 +186,13 @@ export const updateSystemPrompts = (data: SystemPromptsUpdate) =>
 export const getLlmOptions = () => req<LlmOptionsResponse>('/llm/options')
 
 export const getAccountEntitlements = () => req<AccountEntitlements>('/account/entitlements')
+
+// Billing
+export const createCheckoutSession = (plan: 'pro' | 'max' | 'ultra') =>
+  req<{ url: string }>('/billing/create-checkout-session', {
+    method: 'POST',
+    body: JSON.stringify({ plan }),
+  })
+
+export const createPortalSession = () =>
+  req<{ url: string }>('/billing/portal', { method: 'POST' })

@@ -3,11 +3,32 @@ import { useAppStore } from '../store/appStore'
 import * as api from '../api/client'
 import SystemPromptSettings from './SystemPromptSettings'
 
+const PLAN_LABELS: Record<string, string> = {
+  free: 'Free plan',
+  trial: 'Free plan',
+  pro: 'Pro',
+  max: 'Max',
+  ultra: 'Ultra',
+}
+
 export default function UserProfile({ compact = false }: { compact?: boolean }) {
   const { googleUser, googleConnected, authProvider } = useAppStore()
   const [open, setOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [billingBusy, setBillingBusy] = useState(false)
+  const [subscriptionTier, setSubscriptionTier] = useState<string | null>(null)
+  const [hasStripeSubscription, setHasStripeSubscription] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
+
+  // Fetch entitlements once on mount so we know the current tier
+  useEffect(() => {
+    api.getAccountEntitlements()
+      .then(e => {
+        setSubscriptionTier(e.subscription_tier)
+        setHasStripeSubscription(e.subscription_status != null)
+      })
+      .catch(() => {})
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -27,7 +48,11 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
     } catch {
       /* still clear local session */
     }
-    window.location.assign('/')
+    // `replace('/')` is a no-op when already on `/` — browser keeps the SPA mounted
+    // and session state never re-bootstraps. Force a distinct URL so we always reload.
+    const next = new URL(`${window.location.origin}/`)
+    next.searchParams.set('signed_out', '1')
+    window.location.replace(next.toString())
   }
 
   const connectGoogle = async () => {
@@ -37,6 +62,18 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
     } catch {
       const { url } = await api.getGoogleAuthUrl()
       window.location.href = url
+    }
+  }
+
+  const manageBilling = async () => {
+    setBillingBusy(true)
+    try {
+      const { url } = await api.createPortalSession()
+      window.location.href = url
+    } catch {
+      // portal unavailable — fall back silently
+    } finally {
+      setBillingBusy(false)
     }
   }
 
@@ -96,6 +133,11 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
             <p className="text-[11px] text-brand-cloud/50 uppercase tracking-wider">Profile</p>
             {googleUser?.name && <p className="text-sm text-brand-cloud mt-1">{googleUser.name}</p>}
             {googleUser?.email && <p className="text-xs text-brand-cloud/60 break-all">{googleUser.email}</p>}
+            {subscriptionTier && (
+              <p className="text-[10px] text-brand-mint/70 mt-1 uppercase tracking-wider font-semibold">
+                {PLAN_LABELS[subscriptionTier] ?? subscriptionTier}
+              </p>
+            )}
           </div>
           <button
             type="button"
@@ -107,6 +149,24 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
           >
             AI prompt settings…
           </button>
+          {hasStripeSubscription ? (
+            <button
+              type="button"
+              onClick={() => { setOpen(false); manageBilling() }}
+              disabled={billingBusy}
+              className="w-full text-left px-3 py-2 text-sm text-brand-cloud/90 hover:bg-white/[0.06] transition disabled:opacity-50"
+            >
+              {billingBusy ? 'Opening billing…' : 'Manage billing…'}
+            </button>
+          ) : subscriptionTier === 'free' || subscriptionTier === 'trial' ? (
+            <a
+              href="/#pricing-heading"
+              onClick={() => setOpen(false)}
+              className="block px-3 py-2 text-sm text-brand-mint/90 hover:bg-white/[0.06] transition"
+            >
+              Upgrade plan
+            </a>
+          ) : null}
           {!googleConnected && (
             <button
               type="button"

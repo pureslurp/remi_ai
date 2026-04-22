@@ -257,6 +257,7 @@ def get_session(request: Request, db: Session = Depends(get_db)):
         db.query(GoogleOAuthCredential).filter(GoogleOAuthCredential.id == account.id).first() is not None
     )
 
+    from services.usage_entitlements import subscription_tier as _sub_tier
     return {
         "authenticated": True,
         "account": {
@@ -264,6 +265,8 @@ def get_session(request: Request, db: Session = Depends(get_db)):
             "name": account.name,
             "picture": account.picture,
             "auth_provider": getattr(account, "auth_provider", "google"),
+            "subscription_tier": _sub_tier(account),
+            "stripe_customer_id": getattr(account, "stripe_customer_id", None),
         },
         "google_connected": google_connected,
     }
@@ -274,11 +277,18 @@ def get_session(request: Request, db: Session = Depends(get_db)):
 # ---------------------------------------------------------------------------
 
 
-@router.post("/logout", status_code=204)
-def logout(request: Request, response: Response):
+@router.post("/logout")
+def logout(request: Request):
     _sec, _ss = _cookie_transport(request)
-    response.delete_cookie(SESSION_COOKIE_NAME, path="/", secure=_sec, samesite=_ss)
-    return response
+    # Build the response directly so status_code is set and Set-Cookie is emitted.
+    # Returning the FastAPI-injected `response: Response` fixture sends status=None
+    # and uvicorn crashes with KeyError before the cookie delete header is flushed.
+    resp = Response(status_code=204)
+    # Must match set_cookie (httponly/secure/samesite/path) or browsers keep the session cookie.
+    resp.delete_cookie(
+        SESSION_COOKIE_NAME, path="/", secure=_sec, samesite=_ss, httponly=True
+    )
+    return resp
 
 
 # ---------------------------------------------------------------------------
@@ -526,7 +536,9 @@ def google_callback(
             max_age=SESSION_TTL_DAYS * 86400,
             path="/",
         )
-        resp.delete_cookie(_OAUTH_STATE_COOKIE, path="/", secure=_sec, samesite=_ss)
+        resp.delete_cookie(
+            _OAUTH_STATE_COOKIE, path="/", secure=_sec, samesite=_ss, httponly=True
+        )
         logger.info("oauth callback ok (sqlite local account)")
         return resp
 
@@ -568,7 +580,9 @@ def google_callback(
         resp = RedirectResponse(
             url=f"{POST_GOOGLE_OAUTH_FRONTEND_ORIGIN}/?google_linked=1"
         )
-        resp.delete_cookie(_OAUTH_STATE_COOKIE, path="/", secure=_sec, samesite=_ss)
+        resp.delete_cookie(
+            _OAUTH_STATE_COOKIE, path="/", secure=_sec, samesite=_ss, httponly=True
+        )
         logger.info("oauth callback ok (google linked to account %s)", current_account_id)
         return resp
 
@@ -657,7 +671,9 @@ def google_callback(
         max_age=SESSION_TTL_DAYS * 86400,
         path="/",
     )
-    resp.delete_cookie(_OAUTH_STATE_COOKIE, path="/", secure=_sec, samesite=_ss)
+    resp.delete_cookie(
+        _OAUTH_STATE_COOKIE, path="/", secure=_sec, samesite=_ss, httponly=True
+    )
     logger.info("oauth callback ok (postgres, account=%s)", target_id)
     return resp
 
@@ -750,10 +766,9 @@ def google_status(request: Request):
     return _google_status_body(request)
 
 
-@router.post("/google/disconnect", status_code=204)
+@router.post("/google/disconnect")
 def google_disconnect(
     request: Request,
-    response: Response,
     _account_id: str = Depends(require_account),
     db: Session = Depends(get_db),
 ):
@@ -762,7 +777,10 @@ def google_disconnect(
     # For email accounts that linked Google, keep the session alive.
     account = db.get(Account, _account_id)
     sign_out = not account or getattr(account, "auth_provider", "google") == "google"
+    resp = Response(status_code=204)
     if sign_out:
         _sec, _ss = _cookie_transport(request)
-        response.delete_cookie(SESSION_COOKIE_NAME, path="/", secure=_sec, samesite=_ss)
-    return response
+        resp.delete_cookie(
+            SESSION_COOKIE_NAME, path="/", secure=_sec, samesite=_ss, httponly=True
+        )
+    return resp

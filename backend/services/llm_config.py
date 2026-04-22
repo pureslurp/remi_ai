@@ -129,32 +129,40 @@ def model_display_name(provider: str, model: str) -> str:
     return f"{model} ({provider})"
 
 
-# --- Tier allowlists (trial = cheap models only; pro = full MODEL_ALLOWLIST per provider) ---
-TRIAL_TIER_MODELS: dict[str, tuple[str, ...]] = {
+# --- Tier allowlists ---
+# free/trial → standard (cheap) models only
+# pro        → advanced models
+# max/ultra  → frontier models (full allowlist)
+
+_FREE_TIER_MODELS: dict[str, tuple[str, ...]] = {
     "anthropic": _uniq("claude-3-5-haiku-20241022"),
-    "openai": _uniq("gpt-4o-mini"),
+    "openai": _uniq("gpt-4o-mini", "gpt-4.1-mini"),
     "gemini": _uniq("gemini-2.0-flash", "gemini-1.5-flash"),
 }
 
+# Keep legacy alias so any callers of TRIAL_TIER_MODELS still compile.
+TRIAL_TIER_MODELS = _FREE_TIER_MODELS
 
-def _pro_allow_premium_models() -> bool:
-    """When False, Pro uses the same cheap allowlist as trial (strong COGS control)."""
-    return os.environ.get("PRO_ALLOW_PREMIUM_MODELS", "true").strip().lower() not in (
-        "0",
-        "false",
-        "no",
-    )
+_PRO_TIER_MODELS: dict[str, tuple[str, ...]] = {
+    "anthropic": _uniq(ANTHROPIC_MODEL, "claude-3-5-haiku-20241022"),
+    "openai": _uniq(OPENAI_CHAT_MODEL, "gpt-4o", "gpt-4o-mini"),
+    "gemini": _uniq(GEMINI_CHAT_MODEL, "gemini-2.0-flash", "gemini-1.5-flash"),
+}
 
 
 def models_for_subscription_tier(tier: str, provider: str) -> tuple[str, ...]:
     p = provider.lower()
     if p not in MODEL_ALLOWLIST:
         return ()
-    if (tier or "").strip().lower() == "pro":
-        if _pro_allow_premium_models():
-            return MODEL_ALLOWLIST[p]
-        return tuple(m for m in TRIAL_TIER_MODELS.get(p, ()) if m in MODEL_ALLOWLIST[p])
-    return tuple(m for m in TRIAL_TIER_MODELS.get(p, ()) if m in MODEL_ALLOWLIST[p])
+    tier_l = (tier or "free").strip().lower()
+    # max and ultra get the full allowlist (frontier models)
+    if tier_l in ("max", "ultra"):
+        return tuple(m for m in MODEL_ALLOWLIST[p])
+    # pro gets the pro allowlist
+    if tier_l == "pro":
+        return tuple(m for m in _PRO_TIER_MODELS.get(p, ()) if m in MODEL_ALLOWLIST[p])
+    # free / trial → standard models only
+    return tuple(m for m in _FREE_TIER_MODELS.get(p, ()) if m in MODEL_ALLOWLIST[p])
 
 
 def pair_allowed_for_tier(tier: str, provider: str, model: str) -> bool:
@@ -169,7 +177,7 @@ def coerce_llm_for_tier(
 ) -> tuple[str, str]:
     """Resolve stored prefs then clamp to tier + configured keys."""
     p, m = resolve_llm(stored_provider, stored_model)
-    tier_l = (tier or "trial").strip().lower()
+    tier_l = (tier or "free").strip().lower()
     allowed_models = models_for_subscription_tier(tier_l, p)
     if m in allowed_models and provider_key_configured(p):
         return p, m
@@ -213,7 +221,7 @@ def list_llm_options_for_tier(tier: str) -> dict[str, Any]:
         "openai": "OpenAI",
         "gemini": "Google Gemini",
     }
-    tier_l = (tier or "trial").strip().lower()
+    tier_l = (tier or "free").strip().lower()
     providers: list[dict[str, Any]] = []
     for pid in ("anthropic", "openai", "gemini"):
         if not provider_key_configured(pid):

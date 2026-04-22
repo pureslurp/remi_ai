@@ -74,7 +74,13 @@ export default function App() {
   const bootstrap = useCallback(async () => {
     setAuthError(null)
     const params = new URLSearchParams(window.location.search)
-    if (params.get('google_connected') || params.get('google_linked')) {
+    if (
+      params.get('google_connected') ||
+      params.get('google_linked') ||
+      params.get('checkout_success') ||
+      params.get('checkout_canceled') ||
+      params.get('signed_out')
+    ) {
       window.history.replaceState({}, '', '/')
     }
 
@@ -97,6 +103,18 @@ export default function App() {
       }
 
       if (unlocked) {
+        // If user signed up with Google while a paid plan was pending, redirect to Stripe now
+        const pendingPlan = sessionStorage.getItem('pendingPlan')
+        if (pendingPlan && session.account?.subscription_tier === 'free') {
+          sessionStorage.removeItem('pendingPlan')
+          try {
+            const { url } = await api.createCheckoutSession(pendingPlan as 'pro' | 'max' | 'ultra')
+            window.location.href = url
+            return
+          } catch {
+            // If checkout fails, continue into the app on free plan
+          }
+        }
         try {
           await loadSessionProjects(setProjects, setActiveProject)
         } catch (e: unknown) {

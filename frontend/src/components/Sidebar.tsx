@@ -252,7 +252,7 @@ export default function Sidebar({
           <IconChevronRight className="w-5 h-5" />
         </button>
         <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center shrink-0">
-          <span className="text-brand-cloud text-sm font-semibold tracking-tight">K</span>
+          <span className="text-brand-cloud text-sm font-semibold tracking-tight">R</span>
         </div>
         <button
           type="button"

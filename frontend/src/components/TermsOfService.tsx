@@ -1,3 +1,5 @@
+import { RecoMark } from './RecoMark'
+
 export default function TermsOfService() {
   return (
     <div
@@ -9,9 +11,7 @@ export default function TermsOfService() {
       <header className="border-b border-white/[0.06] bg-[rgb(24_24_27_/0.82)] backdrop-blur-lg">
         <div className="mx-auto flex max-w-3xl items-center gap-4 px-5 py-4 sm:px-8">
           <a href="/" className="flex items-center gap-3 hover:opacity-80 transition">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-white/10 bg-gradient-to-br from-brand-navy to-brand-slate">
-              <span className="font-landing-display text-lg font-semibold tracking-tight text-brand-cloud">R</span>
-            </div>
+            <RecoMark variant="legal" />
             <span className="font-landing-display text-xl font-semibold tracking-tight text-brand-cloud">Reco</span>
           </a>
         </div>

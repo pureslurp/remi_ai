@@ -34,8 +34,8 @@ def create_project(
     account_id: str = Depends(require_account),
 ):
     acc = db.get(Account, account_id)
-    tier = subscription_tier(acc) if acc else "trial"
-    if tier == "trial":
+    tier = subscription_tier(acc) if acc else "free"
+    if tier == "free":
         existing = db.query(Project).filter(Project.owner_id == account_id).count()
         if existing >= FREE_TIER_CLIENT_LIMIT:
             raise HTTPException(
