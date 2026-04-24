@@ -1,5 +1,7 @@
 export interface GmailAddressRule {
   keywords?: string[]
+  /** include = subject must match a keyword; exclude = skip if subject matches any keyword */
+  keyword_mode?: 'include' | 'exclude'
   after_date?: string | null
 }
 
@@ -14,6 +16,8 @@ export interface Project {
   drive_folder_name?: string
   /** @deprecated Prefer gmail_address_rules; used when no per-address rule exists */
   gmail_keywords?: string[]
+  /** Default for addresses with no saved rule: how global keywords apply to subject */
+  gmail_keyword_mode?: 'include' | 'exclude'
   /** Per-address optional subject keywords and/or minimum message date */
   gmail_address_rules?: Record<string, GmailAddressRule>
   last_gmail_sync?: string

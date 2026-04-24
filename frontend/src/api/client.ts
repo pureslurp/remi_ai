@@ -111,6 +111,8 @@ export const deleteDocument = (projectId: string, docId: string) =>
 // Gmail
 export const listEmails = (projectId: string) =>
   req<EmailThread[]>(`/projects/${projectId}/emails`)
+export const deleteEmailThread = (projectId: string, threadId: string) =>
+  req<void>(`/projects/${projectId}/emails/${threadId}`, { method: 'DELETE' })
 export const syncGmail = (projectId: string) =>
   req<{ synced: number; threads_checked?: number; message: string }>(
     `/projects/${projectId}/gmail/sync`,

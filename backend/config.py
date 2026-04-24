@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 # Default dotenv behavior leaves existing env vars untouched, which breaks local dev
 # when the shell still has an old direct Supabase host but .env was updated to pooler.
 load_dotenv(Path(__file__).parent.parent / ".env", override=True)
+# Optional backend-local overrides (fills vars not already set from repo root .env).
+load_dotenv(Path(__file__).parent / ".env", override=False)
 
 # Primary env var is RECO_HOME; fall back to legacy KOVA_HOME and REMI_HOME so existing
 # deployments with old vars keep booting during rename.

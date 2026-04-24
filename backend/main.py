@@ -32,6 +32,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger("reco")
 
+if os.environ.get("GMAIL_SYNC_DEBUG", "").strip().lower() in ("1", "true", "yes"):
+    print(
+        "[gmail_sync] GMAIL_SYNC_DEBUG=1 — verbose lines print to this terminal on each Gmail sync.",
+        flush=True,
+    )
+
 from database import engine, Base
 import models  # ensure all ORM models are registered
 
@@ -191,6 +197,11 @@ def _bootstrap_sqlite() -> None:
                 conn.commit()
             if pcols and "sale_property_id" not in pcols:
                 conn.execute(text("ALTER TABLE projects ADD COLUMN sale_property_id VARCHAR"))
+                conn.commit()
+            if pcols and "gmail_keyword_mode" not in pcols:
+                conn.execute(
+                    text("ALTER TABLE projects ADD COLUMN gmail_keyword_mode VARCHAR DEFAULT 'include'")
+                )
                 conn.commit()
             try:
                 conn.execute(

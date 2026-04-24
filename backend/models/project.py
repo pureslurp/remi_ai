@@ -19,6 +19,8 @@ class Project(Base):
     drive_folder_name = Column(String)
     gmail_history_id = Column(String)
     gmail_keywords = Column(JSON, default=list)
+    # "include" = subject must contain a keyword (when keywords non-empty); "exclude" = skip if subject matches any
+    gmail_keyword_mode = Column(String, nullable=False, default="include")
     gmail_address_rules = Column(JSON, default=dict)  # per-address optional keywords + after_date
     last_gmail_sync = Column(DateTime)
     last_drive_sync = Column(DateTime)

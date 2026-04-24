@@ -1,5 +1,6 @@
 import base64
 import html as html_module
+import os
 import re
 from datetime import datetime
 from email.utils import parsedate_to_datetime
@@ -7,6 +8,11 @@ from sqlalchemy.orm import Session
 
 from models import Project, EmailThread, EmailMessage, Document
 from config import GOOGLE_SCOPES
+
+
+def _gmail_sync_debug_enabled() -> bool:
+    """Read each sync so a server restart after editing .env is enough (matches env at request time)."""
+    return os.environ.get("GMAIL_SYNC_DEBUG", "").strip().lower() in ("1", "true", "yes")
 from services.document_service import process_bytes
 from services import google_token_store
 
@@ -118,6 +124,12 @@ def _subject_matches_keywords(subject: str, keywords: list[str]) -> bool:
     return any(kw.lower() in subject_lower for kw in keywords)
 
 
+def _normalize_keyword_mode(raw: str | None) -> str:
+    if (raw or "").strip().lower() == "exclude":
+        return "exclude"
+    return "include"
+
+
 def _normalize_rules_map(raw: dict | None) -> dict[str, dict]:
     if not raw:
         return {}
@@ -134,20 +146,24 @@ def _parse_after_date(iso_date: str | None) -> datetime | None:
         return None
 
 
-def _effective_rule(project: Project, addr: str) -> tuple[list[str], datetime | None]:
+def _effective_rule(project: Project, addr: str) -> tuple[list[str], datetime | None, str]:
     """
-    Keywords + optional after_date for one client email address.
-    Legacy: when gmail_address_rules is empty, all addresses use gmail_keywords.
-    When rules exist but this address has no entry, still use gmail_keywords (gradual setup).
-    When this address has an explicit entry, use its keywords (empty list = no subject filter).
+    Keywords + optional after_date + keyword_mode for one client email address.
+
+    Per-address entry: non-empty ``keywords`` overrides the global list; empty ``keywords`` inherits
+    ``project.gmail_keywords`` so you can set e.g. exclude mode on the global phrases for one address.
     """
     addr_l = addr.strip().lower()
     norm = _normalize_rules_map(project.gmail_address_rules)
+    global_kw = list(project.gmail_keywords or [])
+    global_mode = _normalize_keyword_mode(getattr(project, "gmail_keyword_mode", None))
     if addr_l in norm:
         entry = norm[addr_l]
-        kw = list(entry.get("keywords") or [])
-        return (kw, _parse_after_date(entry.get("after_date")))
-    return (list(project.gmail_keywords or []), None)
+        local_kw = list(entry.get("keywords") or [])
+        kw = local_kw if local_kw else global_kw
+        mode = _normalize_keyword_mode(entry.get("keyword_mode"))
+        return (kw, _parse_after_date(entry.get("after_date")), mode)
+    return (global_kw, None, global_mode)
 
 
 def _message_matches_address_rules(
@@ -165,9 +181,13 @@ def _message_matches_address_rules(
         return False
 
     for ea in matched:
-        keywords, after_dt = _effective_rule(project, ea)
-        if keywords and not _subject_matches_keywords(subject, keywords):
-            continue
+        keywords, after_dt, kw_mode = _effective_rule(project, ea)
+        if keywords:
+            subj_hit = _subject_matches_keywords(subject, keywords)
+            if kw_mode == "exclude" and subj_hit:
+                continue
+            if kw_mode == "include" and not subj_hit:
+                continue
         if after_dt is not None:
             if msg_date is None:
                 continue
@@ -177,6 +197,44 @@ def _message_matches_address_rules(
     return False
 
 
+def _explain_rule_rejection(
+    project: Project,
+    subject: str,
+    msg_date: datetime | None,
+    from_addr: str,
+    to_addrs: list[str],
+    cc_addrs: list[str],
+) -> str:
+    """Human-readable reason when _message_matches_address_rules is False (for debug)."""
+    blob = " ".join([from_addr] + to_addrs + cc_addrs).lower()
+    matched = [ea for ea in project.email_addresses if ea.lower() in blob]
+    if not matched:
+        return "no configured client address found as substring in From/To/Cc"
+    parts: list[str] = []
+    for ea in matched:
+        keywords, after_dt, kw_mode = _effective_rule(project, ea)
+        bits: list[str] = []
+        if keywords:
+            subj_hit = _subject_matches_keywords(subject, keywords)
+            if kw_mode == "include" and not subj_hit:
+                bits.append(
+                    f"need subject containing one of {keywords!r} (subject={subject[:120]!r})"
+                )
+            if kw_mode == "exclude" and subj_hit:
+                bits.append(
+                    f"excluded: subject matches one of {keywords!r} (mode=exclude; subject={subject[:120]!r})"
+                )
+        if after_dt is not None:
+            if msg_date is None:
+                bits.append(f"need on/after {after_dt.date()} but Date header missing or unparseable")
+            elif msg_date.replace(tzinfo=None) < after_dt:
+                bits.append(f"need on/after {after_dt.date()} but message date is {msg_date}")
+        if not bits:
+            bits.append("(would pass for this address — unexpected)")
+        parts.append(f"{ea}: {'; '.join(bits)}")
+    return "filters: " + " | ".join(parts)
+
+
 def _parse_date(header_val: str) -> datetime | None:
     try:
         return parsedate_to_datetime(header_val).replace(tzinfo=None)
@@ -184,8 +242,79 @@ def _parse_date(header_val: str) -> datetime | None:
         return None
 
 
+def _history_message_ids_paginated(gmail, start_history_id: str) -> tuple[list[str], str | None]:
+    """All history pages since start_history_id; last response's historyId is the next sync cursor."""
+    ids: list[str] = []
+    page_token: str | None = None
+    final_mailbox_history_id: str | None = None
+    while True:
+        kwargs: dict = {
+            "userId": "me",
+            "startHistoryId": start_history_id,
+            "historyTypes": ["messageAdded"],
+            "maxResults": 500,
+        }
+        if page_token:
+            kwargs["pageToken"] = page_token
+        resp = gmail.users().history().list(**kwargs).execute()
+        for record in resp.get("history", []):
+            for m in record.get("messagesAdded", []):
+                mid = m.get("message", {}).get("id")
+                if mid:
+                    ids.append(mid)
+        if resp.get("historyId"):
+            final_mailbox_history_id = resp["historyId"]
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+    return ids, final_mailbox_history_id
+
+
+def _thread_ids_paginated(gmail, query: str, *, max_pages: int = 20, page_size: int = 100) -> list[str]:
+    """Gmail search for threads matching query, up to max_pages of page_size each."""
+    if not (query or "").strip():
+        return []
+    out: list[str] = []
+    page_token: str | None = None
+    for _ in range(max_pages):
+        kwargs: dict = {"userId": "me", "q": query, "maxResults": page_size}
+        if page_token:
+            kwargs["pageToken"] = page_token
+        resp = gmail.users().threads().list(**kwargs).execute()
+        for t in resp.get("threads", []):
+            tid = t.get("id")
+            if tid:
+                out.append(tid)
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+    return out
+
+
 def sync_gmail(project: Project, db: Session) -> dict:
     from googleapiclient.discovery import build as google_build
+    from googleapiclient.errors import HttpError
+
+    _print_n = 0
+    _PRINT_MAX = 450
+    _skip_samples_left = 28
+
+    def trace(line: str) -> None:
+        nonlocal _print_n
+        if not _gmail_sync_debug_enabled():
+            return
+        if _print_n >= _PRINT_MAX:
+            return
+        _print_n += 1
+        # Same stdout as `./run.sh` (uvicorn is a child process; lines interleave with Vite).
+        print(f"[gmail_sync] {line}", flush=True)
+
+    def trace_skip_sample(line: str) -> None:
+        nonlocal _skip_samples_left
+        if _skip_samples_left <= 0:
+            return
+        _skip_samples_left -= 1
+        trace(line)
 
     if not project.email_addresses:
         return {
@@ -197,62 +326,111 @@ def sync_gmail(project: Project, db: Session) -> dict:
     creds = _get_creds()
     gmail = google_build("gmail", "v1", credentials=creds)
 
-    new_message_ids = []
+    history_message_ids: list[str] = []
+    history_final_id: str | None = None
+    history_fallback = False
+    had_history_cursor = bool(project.gmail_history_id)
 
     if project.gmail_history_id:
-        # Incremental sync
         try:
-            history_resp = gmail.users().history().list(
-                userId="me",
-                startHistoryId=project.gmail_history_id,
-                historyTypes=["messageAdded"],
-            ).execute()
-            for record in history_resp.get("history", []):
-                for msg in record.get("messagesAdded", []):
-                    new_message_ids.append(msg["message"]["id"])
-        except Exception:
-            # historyId expired — fall back to full sync
+            history_message_ids, history_final_id = _history_message_ids_paginated(
+                gmail, project.gmail_history_id
+            )
+        except Exception as hist_exc:
+            # historyId expired — fall back to full scan via thread search only
+            history_fallback = True
+            trace(f"history.list failed ({type(hist_exc).__name__}: {hist_exc!s}); clearing cursor for full scan")
             project.gmail_history_id = None
             db.commit()
 
-    if not project.gmail_history_id:
-        # Full sync: discover threads by address only; keywords/date are applied per message below
-        query = _build_query(project.email_addresses, None)
-        resp = gmail.users().threads().list(userId="me", q=query, maxResults=50).execute()
-        threads = resp.get("threads", [])
-        for t in threads:
-            new_message_ids.append(t["id"])  # reuse id as thread_id for lookup
+    full_query = _build_query(project.email_addresses, None)
+    thread_ids = _thread_ids_paginated(gmail, full_query) if full_query else []
+    thread_ids = list(dict.fromkeys(thread_ids))
+
+    # History = new message ids since cursor; thread search = Gmail query for client addresses (always).
+    work_queue: list[tuple[str, bool]] = [(mid, True) for mid in history_message_ids]
+    work_queue.extend((tid, False) for tid in thread_ids)
 
     messages_imported = 0
-    threads_checked = len(new_message_ids)
+    threads_checked = len(work_queue)
     latest_history_id = project.gmail_history_id
 
-    for msg_or_thread_id in new_message_ids:
+    # In-session caches: Session.get() does NOT find pending (unflushed) objects, so we must track
+    # what we've added this sync to avoid creating duplicate EmailThread/EmailMessage rows when the
+    # same thread appears in both the history queue and the thread-search queue.
+    thread_cache: dict[str, EmailThread] = {}
+    seen_msg_ids: set[str] = set()
+
+    n_skip_existing = 0
+    n_skip_addr = 0
+    n_skip_rules = 0
+    n_skip_gone = 0  # History listed an id Gmail no longer returns (deleted / expunged) → 404 on get
+    n_skip_dup = 0   # Same message/thread already processed earlier this sync
+    n_batch_errors = 0
+
+    if _gmail_sync_debug_enabled():
+        trace(
+            f"start project={project.id} had_history_cursor={had_history_cursor} "
+            f"history_fallback={history_fallback} history_msgs={len(history_message_ids)} "
+            f"search_threads={len(thread_ids)} queued={threads_checked} "
+            f"history_cursor_out={history_final_id!r}"
+        )
+        trace(
+            f"client_emails={project.email_addresses!r} "
+            f"gmail_keywords={project.gmail_keywords!r} "
+            f"gmail_keyword_mode={_normalize_keyword_mode(getattr(project, 'gmail_keyword_mode', None))!r} "
+            f"rule_keys={list((project.gmail_address_rules or {}).keys())!r}"
+        )
+        trace(f"threads.list query={full_query!r}")
+
+    for msg_or_thread_id, fetch_as_message in work_queue:
         try:
-            if project.gmail_history_id:
-                # It's a message ID
-                msg_data = gmail.users().messages().get(
-                    userId="me", id=msg_or_thread_id, format="full"
-                ).execute()
+            if fetch_as_message:
+                # Message id from users.history — can 404 after delete/trash empty
+                try:
+                    msg_data = gmail.users().messages().get(
+                        userId="me", id=msg_or_thread_id, format="full"
+                    ).execute()
+                except HttpError as he:
+                    if getattr(he.resp, "status", None) == 404:
+                        n_skip_gone += 1
+                        trace_skip_sample(
+                            f"skip message id not found (404, often deleted after history) id={msg_or_thread_id!r}"
+                        )
+                        continue
+                    raise
                 thread_id = msg_data["threadId"]
             else:
-                # It's a thread ID
                 thread_id = msg_or_thread_id
-                thread_data = gmail.users().threads().get(
-                    userId="me", id=thread_id, format="full"
-                ).execute()
+                try:
+                    thread_data = gmail.users().threads().get(
+                        userId="me", id=thread_id, format="full"
+                    ).execute()
+                except HttpError as he:
+                    if getattr(he.resp, "status", None) == 404:
+                        n_skip_gone += 1
+                        trace_skip_sample(f"skip thread not found (404) id={thread_id!r}")
+                        continue
+                    raise
                 messages_data = thread_data.get("messages", [])
 
-            thread_obj = db.get(EmailThread, thread_id)
+            thread_obj = thread_cache.get(thread_id) or db.get(EmailThread, thread_id)
 
-            msgs_to_process = [msg_data] if project.gmail_history_id else messages_data
+            msgs_to_process = [msg_data] if fetch_as_message else messages_data
 
             participants = set()
             latest_date = None
 
             for msg in msgs_to_process:
                 msg_id = msg["id"]
+                if msg_id in seen_msg_ids:
+                    n_skip_dup += 1
+                    trace_skip_sample(f"skip already processed this sync msg_id={msg_id}")
+                    continue
                 if db.get(EmailMessage, msg_id):
+                    seen_msg_ids.add(msg_id)
+                    n_skip_existing += 1
+                    trace_skip_sample(f"skip already in DB msg_id={msg_id}")
                     continue
 
                 headers = {h["name"]: h["value"] for h in msg.get("payload", {}).get("headers", [])}
@@ -268,17 +446,33 @@ def sync_gmail(project: Project, db: Session) -> dict:
                 all_addrs = [from_addr] + to_addrs + cc_addrs
                 addr_blob = " ".join(all_addrs).lower()
                 if not any(ea.lower() in addr_blob for ea in project.email_addresses):
+                    n_skip_addr += 1
+                    trace_skip_sample(
+                        f"skip no client addr in From/To/Cc msg_id={msg_id} "
+                        f"from={from_addr[:80]!r} subject={subject[:80]!r}"
+                    )
                     continue
 
                 # Filter: per-address subject keywords and optional after-date
                 if not _message_matches_address_rules(
                     project, subject, date, from_addr, to_addrs, cc_addrs
                 ):
+                    n_skip_rules += 1
+                    trace_skip_sample(
+                        f"skip rules msg_id={msg_id} {_explain_rule_rejection(project, subject, date, from_addr, to_addrs, cc_addrs)}"
+                    )
                     continue
+
+                if _gmail_sync_debug_enabled():
+                    trace(
+                        f"import msg_id={msg_id} thread={thread_id} subject={subject[:100]!r} "
+                        f"from={from_addr[:100]!r}"
+                    )
 
                 if thread_obj is None:
                     thread_obj = EmailThread(id=thread_id, project_id=project.id)
                     db.add(thread_obj)
+                    thread_cache[thread_id] = thread_obj
 
                 thread_obj.subject = subject
                 participants.update([from_addr] + to_addrs + cc_addrs)
@@ -294,6 +488,7 @@ def sync_gmail(project: Project, db: Session) -> dict:
                     body_text=body[:8000],  # cap per-message storage
                     snippet=snippet,
                 ))
+                seen_msg_ids.add(msg_id)
                 messages_imported += 1
 
                 # Extract attachments
@@ -308,11 +503,17 @@ def sync_gmail(project: Project, db: Session) -> dict:
                     thread_obj.last_message_date = latest_date
                 thread_obj.fetched_at = datetime.utcnow()
 
-        except Exception:
+        except Exception as batch_exc:
+            n_batch_errors += 1
+            trace(
+                f"batch error id={msg_or_thread_id!r} {type(batch_exc).__name__}: {batch_exc!s}"[:400]
+            )
             continue  # skip failed messages, don't break entire sync
 
-    # Update history cursor
-    if latest_history_id:
+    # Advance sync cursor: prefer mailbox historyId from history.list (Gmail-recommended), else last message.
+    if history_final_id:
+        project.gmail_history_id = history_final_id
+    elif latest_history_id:
         project.gmail_history_id = latest_history_id
     project.last_gmail_sync = datetime.utcnow()
     try:
@@ -335,7 +536,53 @@ def sync_gmail(project: Project, db: Session) -> dict:
     else:
         msg = "No Gmail threads matched the client addresses."
 
+    if _gmail_sync_debug_enabled():
+        trace(
+            f"summary imported={messages_imported} skip_already_in_db={n_skip_existing} "
+            f"skip_dup_in_sync={n_skip_dup} skip_no_client_address={n_skip_addr} "
+            f"skip_rules={n_skip_rules} skip_gone_404={n_skip_gone} batch_errors={n_batch_errors} "
+            f"cursor_from_history_api={bool(history_final_id)} cursor_from_message={bool(latest_history_id)}"
+        )
+        if _print_n >= _PRINT_MAX:
+            print("[gmail_sync] (reached print cap; increase _PRINT_MAX if needed)", flush=True)
+
     return {"synced": messages_imported, "threads_checked": threads_checked, "message": msg}
+
+
+def delete_synced_email_thread(db: Session, *, project_id: str, thread_id: str) -> bool:
+    """Remove one stored Gmail thread for a project (messages, related doc rows). Does not touch Gmail."""
+    thread = db.get(EmailThread, thread_id)
+    if not thread or thread.project_id != project_id:
+        return False
+
+    try:
+        mids = [m.id for m in db.query(EmailMessage).filter(EmailMessage.thread_id == thread_id).all()]
+        if mids:
+            doc_ids = [
+                d.id
+                for d in db.query(Document).filter(
+                    Document.project_id == project_id,
+                    Document.gmail_message_id.in_(mids),
+                ).all()
+            ]
+        else:
+            doc_ids = []
+
+        if doc_ids:
+            db.query(DocumentChunk).filter(DocumentChunk.document_id.in_(doc_ids)).delete(
+                synchronize_session=False
+            )
+            db.query(Document).filter(Document.id.in_(doc_ids)).delete(synchronize_session=False)
+
+        db.query(EmailMessage).filter(EmailMessage.thread_id == thread_id).delete(
+            synchronize_session=False
+        )
+        db.query(EmailThread).filter(EmailThread.id == thread_id).delete(synchronize_session=False)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return True
 
 
 def create_gmail_draft(to: str, subject: str, body: str) -> str:

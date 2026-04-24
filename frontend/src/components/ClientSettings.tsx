@@ -1,23 +1,75 @@
 import { useState, useEffect } from 'react'
 import { useAppStore } from '../store/appStore'
 import * as api from '../api/client'
-import type { Project } from '../types'
+import type { EmailThread, Project } from '../types'
 import { getClientPanelCopy } from '../lib/clientPanelCopy'
 import TransactionPanel from './TransactionPanel'
 import DocumentList from './DocumentList'
 import SyncStatus from './SyncStatus'
 
-/** Tooltip so saved filters stay discoverable without expanding the UI */
-function gmailAddressTitle(project: Project, email: string): string {
+type KeywordMode = 'include' | 'exclude'
+
+/** Mirrors backend `_effective_rule`: local keywords override global; empty local list inherits global. */
+function gmailAddressEffectiveFilters(project: Project, email: string): {
+  keywords: string[]
+  afterDate: string | null | undefined
+  keywordMode: KeywordMode
+} {
+  const addrL = email.trim().toLowerCase()
   const raw = project.gmail_address_rules || {}
-  const entry = Object.entries(raw).find(([k]) => k.toLowerCase() === email.toLowerCase())?.[1]
-  const bits: string[] = []
-  if (entry?.keywords?.length) bits.push(`subject: ${entry.keywords.join(', ')}`)
-  if (entry?.after_date) bits.push(`after ${String(entry.after_date).slice(0, 10)}`)
-  if (!bits.length && (project.gmail_keywords || []).length) {
-    bits.push(`inherits global keywords: ${(project.gmail_keywords || []).join(', ')}`)
+  const entry = Object.entries(raw).find(([k]) => k.trim().toLowerCase() === addrL)?.[1]
+  const globalKw = (project.gmail_keywords || []).filter(Boolean)
+  const globalMode: KeywordMode = project.gmail_keyword_mode === 'exclude' ? 'exclude' : 'include'
+  if (entry && typeof entry === 'object') {
+    const localKw = Array.isArray(entry.keywords) ? entry.keywords.filter(Boolean) : []
+    const kw = localKw.length > 0 ? localKw : globalKw
+    const mode: KeywordMode = entry.keyword_mode === 'exclude' ? 'exclude' : 'include'
+    return { keywords: kw, afterDate: entry.after_date, keywordMode: mode }
   }
-  return bits.length ? `${email} (${bits.join(' · ')})` : email
+  return { keywords: globalKw, afterDate: undefined, keywordMode: globalMode }
+}
+
+/** Short line shown under each address chip (native `title` is slow / invisible when empty). */
+function gmailAddressFilterSummary(project: Project, email: string): string {
+  const { keywords, afterDate, keywordMode } = gmailAddressEffectiveFilters(project, email)
+  const parts: string[] = []
+  if (keywords.length > 0) {
+    parts.push(
+      keywordMode === 'exclude'
+        ? `Do not include if subject contains: ${keywords.join(', ')}`
+        : `Subject must contain one of: ${keywords.join(', ')}`
+    )
+  } else {
+    parts.push('Any subject')
+  }
+  if (afterDate) {
+    parts.push(`on or after ${String(afterDate).slice(0, 10)}`)
+  }
+  return parts.join(' · ')
+}
+
+function gmailAddressTitle(project: Project, email: string): string {
+  return `${email} — ${gmailAddressFilterSummary(project, email)}`
+}
+
+/** One short label for a collapsed address row (not the full rule sentence). */
+function gmailAddressShortBadge(project: Project, email: string): string {
+  const { keywords, afterDate, keywordMode } = gmailAddressEffectiveFilters(project, email)
+  if (!keywords.length && !afterDate) return 'All subjects'
+  const bits: string[] = []
+  if (keywords.length) {
+    bits.push(keywordMode === 'exclude' ? 'Excludes phrases' : 'Requires phrase')
+  }
+  if (afterDate) bits.push('Has date cutoff')
+  return bits.join(' · ')
+}
+
+function globalGmailSummaryLine(project: Project): string {
+  const kw = (project.gmail_keywords || []).filter(Boolean)
+  if (!kw.length) return 'No default phrase filters'
+  const verb = project.gmail_keyword_mode === 'exclude' ? 'Skip if subject has' : 'Subject must include'
+  const sample = kw.slice(0, 2).join(', ')
+  return `${verb}: ${sample}${kw.length > 2 ? '…' : ''}`
 }
 
 function Section({ title, defaultOpen = true, children }: {
@@ -55,20 +107,29 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
   const [notes, setNotes] = useState(project.notes || '')
   const [emailInput, setEmailInput] = useState('')
   const [newEmailKeywords, setNewEmailKeywords] = useState('')
+  const [newEmailKeywordMode, setNewEmailKeywordMode] = useState<KeywordMode>('include')
   const [newEmailAfterDate, setNewEmailAfterDate] = useState('')
+  const [globalKwInput, setGlobalKwInput] = useState('')
+  const [globalKeywordMode, setGlobalKeywordMode] = useState<KeywordMode>('include')
+  const [gmailDefaultsOpen, setGmailDefaultsOpen] = useState(false)
+  const [expandedClientEmail, setExpandedClientEmail] = useState<string | null>(null)
   const [driveUrl, setDriveUrl] = useState(project.drive_folder_id || '')
   const [gmailSyncing, setGmailSyncing] = useState(false)
   const [driveSyncing, setDriveSyncing] = useState(false)
   const [gmailMsg, setGmailMsg] = useState('')
   const [driveMsg, setDriveMsg] = useState('')
   const [clearConfirm, setClearConfirm] = useState(false)
+  const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null)
 
   useEffect(() => {
     setName(project.name)
     setPhone(project.phone || '')
     setNotes(project.notes || '')
     setDriveUrl(project.drive_folder_id || '')
-  }, [project.id])
+    setGlobalKwInput((project.gmail_keywords || []).join(', '))
+    setGlobalKeywordMode(project.gmail_keyword_mode === 'exclude' ? 'exclude' : 'include')
+    setExpandedClientEmail(null)
+  }, [project.id, project.gmail_keywords, project.gmail_keyword_mode])
 
   const save = async (fields: Partial<Project>) => {
     const updated = await api.updateProject(project.id, fields)
@@ -84,8 +145,12 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
     const afterDate = newEmailAfterDate.trim() || null
 
     const raw = { ...(project.gmail_address_rules || {}) }
-    if (keywords.length > 0 || afterDate) {
-      raw[email] = { keywords, after_date: afterDate }
+    if (keywords.length > 0 || afterDate || newEmailKeywordMode !== 'include') {
+      raw[email] = {
+        keywords,
+        after_date: afterDate,
+        keyword_mode: newEmailKeywordMode,
+      }
     }
 
     const updated = await api.updateProject(project.id, {
@@ -95,7 +160,30 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
     onProjectUpdated(updated)
     setEmailInput('')
     setNewEmailKeywords('')
+    setNewEmailKeywordMode('include')
     setNewEmailAfterDate('')
+  }
+
+  const saveGlobalGmailFilters = async () => {
+    const keywords = globalKwInput
+      .split(',')
+      .map(k => k.trim())
+      .filter(Boolean)
+    const updated = await api.updateProject(project.id, {
+      gmail_keywords: keywords,
+      gmail_keyword_mode: globalKeywordMode,
+    })
+    onProjectUpdated(updated)
+  }
+
+  const setAddressKeywordMode = async (email: string, mode: KeywordMode) => {
+    const raw = { ...(project.gmail_address_rules || {}) }
+    const key =
+      Object.keys(raw).find(k => k.trim().toLowerCase() === email.trim().toLowerCase()) || email
+    const prev = raw[key] && typeof raw[key] === 'object' ? { ...raw[key] } : {}
+    raw[key] = { ...prev, keyword_mode: mode }
+    const updated = await api.updateProject(project.id, { gmail_address_rules: raw })
+    onProjectUpdated(updated)
   }
 
   const removeEmail = async (email: string) => {
@@ -154,6 +242,31 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
 
   const gmailThreadsForProject = emailThreads.filter(t => t.project_id === project.id)
   const panelCopy = getClientPanelCopy(project.client_type)
+
+  const removeSyncedThread = async (thread: EmailThread) => {
+    setDeletingThreadId(thread.id)
+    try {
+      await api.deleteEmailThread(project.id, thread.id)
+      const msgIds = new Set((thread.messages || []).map(m => m.id))
+      setEmailThreads(emailThreads.filter(t => t.id !== thread.id))
+      if (msgIds.size > 0) {
+        setDocuments(
+          documents.filter(
+            d =>
+              !(
+                d.project_id === project.id &&
+                d.gmail_message_id &&
+                msgIds.has(d.gmail_message_id)
+              ),
+          ),
+        )
+      }
+    } catch (err: unknown) {
+      setGmailMsg(err instanceof Error ? err.message : 'Could not remove thread')
+    } finally {
+      setDeletingThreadId(null)
+    }
+  }
 
   return (
     <div className={`overflow-y-auto h-full ${panelCopy.panelAccentClass}`}>
@@ -217,51 +330,147 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
 
         {/* Gmail */}
         <Section title="Gmail Sync" defaultOpen={false}>
-          <p className="text-xs text-brand-cloud/50 mb-2 leading-relaxed">
-            Threads match when the client’s email appears in From or To. Optional filters below apply only when you add an address — hover a chip to see saved rules.
+          <p className="text-xs text-brand-cloud/50 mb-3 leading-relaxed">
+            A thread syncs when the client’s address appears in From, To, or Cc. Use subject phrases below to narrow or exclude mail when adding an address — or open an existing address for details.
           </p>
-          {(project.gmail_keywords || []).length > 0 && (
-            <p className="text-xs text-amber-300/90 mb-2">
-              Global keywords still apply to addresses added without filters: {(project.gmail_keywords || []).join(', ')}
-            </p>
+
+          <button
+            type="button"
+            onClick={() => setGmailDefaultsOpen(o => !o)}
+            aria-expanded={gmailDefaultsOpen}
+            className="mb-2 flex w-full items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] px-2.5 py-2 text-left transition hover:bg-white/[0.04] focus:outline-none focus:ring-1 focus:ring-brand-mint/40"
+          >
+            <span className="text-[10px] text-brand-cloud/40 w-4 shrink-0 select-none">{gmailDefaultsOpen ? '▼' : '▶'}</span>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-medium uppercase tracking-wider text-brand-cloud/50">Workspace defaults</p>
+              <p className="truncate text-[11px] text-brand-cloud/65">{globalGmailSummaryLine(project)}</p>
+            </div>
+          </button>
+          {gmailDefaultsOpen && (
+            <div className="mb-3 space-y-2 rounded-xl border border-white/10 bg-white/[0.02] px-3 py-2.5">
+              <p className="text-[10px] text-brand-cloud/45 leading-snug">
+                Used for every address until you set phrases when adding that address. “Exclude” skips blasts (e.g. prospective-home sends).
+              </p>
+              <input
+                className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-xs text-brand-cloud placeholder-brand-cloud/35 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50"
+                value={globalKwInput}
+                onChange={e => setGlobalKwInput(e.target.value)}
+                placeholder="Comma-separated phrases…"
+              />
+              <div className="flex flex-wrap items-center gap-2">
+                <select
+                  className="min-w-0 flex-1 bg-white/[0.04] border border-white/10 rounded-lg px-2 py-1.5 text-xs text-brand-cloud/90 outline-none focus:ring-1 focus:ring-brand-mint/50"
+                  value={globalKeywordMode}
+                  onChange={e => setGlobalKeywordMode(e.target.value as KeywordMode)}
+                >
+                  <option value="include">Include — keep if subject matches</option>
+                  <option value="exclude">Exclude — skip if subject matches</option>
+                </select>
+                <button
+                  type="button"
+                  onClick={() => void saveGlobalGmailFilters()}
+                  className="shrink-0 rounded-lg border border-white/10 bg-white/[0.08] px-3 py-1.5 text-xs text-brand-cloud transition hover:bg-white/[0.12]"
+                >
+                  Save
+                </button>
+              </div>
+            </div>
           )}
-          <div className="flex flex-wrap gap-1 mb-3">
-            {project.email_addresses.map(email => (
-              <span
-                key={email}
-                title={gmailAddressTitle(project, email)}
-                className="flex items-center gap-1 bg-white/[0.04] border border-white/10 text-xs px-2 py-1 rounded-full text-brand-cloud/85 max-w-full"
-              >
-                <span className="truncate">{email}</span>
-                <button type="button" onClick={() => removeEmail(email)} className="text-brand-cloud/45 hover:text-red-300 transition shrink-0">×</button>
-              </span>
-            ))}
-          </div>
-          <div className="space-y-2 mb-3 rounded-xl border border-white/10 bg-white/[0.02] p-3">
+
+          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-brand-cloud/50">Client addresses</p>
+          <ul className="mb-3 space-y-1">
+            {project.email_addresses.map(email => {
+              const open = expandedClientEmail === email
+              return (
+                <li
+                  key={email}
+                  className="overflow-hidden rounded-lg border border-white/10 bg-white/[0.02]"
+                >
+                  <div className="flex items-stretch gap-0">
+                    <button
+                      type="button"
+                      aria-expanded={open}
+                      title={gmailAddressTitle(project, email)}
+                      onClick={() => setExpandedClientEmail(open ? null : email)}
+                      className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left transition hover:bg-white/[0.04] focus:outline-none focus:ring-1 focus:ring-inset focus:ring-brand-mint/30"
+                    >
+                      <span className="w-4 shrink-0 text-center text-[10px] text-brand-cloud/35 select-none">{open ? '▼' : '▶'}</span>
+                      <span className="truncate text-xs text-brand-cloud/90">{email}</span>
+                      <span className="ml-1 max-w-[42%] shrink-0 truncate text-right text-[10px] text-brand-cloud/40">
+                        {gmailAddressShortBadge(project, email)}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void removeEmail(email)}
+                      className="shrink-0 border-l border-white/10 px-2.5 text-brand-cloud/40 transition hover:bg-red-500/10 hover:text-red-300"
+                      aria-label={`Remove ${email}`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                  {open && (
+                    <div className="space-y-2 border-t border-white/5 bg-black/20 px-3 py-2.5">
+                      <p className="text-[11px] leading-relaxed text-brand-cloud/55">{gmailAddressFilterSummary(project, email)}</p>
+                      <div className="flex flex-col gap-1">
+                        <label htmlFor={`kw-mode-${email}`} className="text-[10px] uppercase tracking-wide text-brand-cloud/45">
+                          Subject phrases apply as
+                        </label>
+                        <select
+                          id={`kw-mode-${email}`}
+                          className="w-full rounded-md border border-white/10 bg-white/[0.04] px-2 py-1.5 text-xs text-brand-cloud/90 outline-none focus:ring-1 focus:ring-brand-mint/50"
+                          value={gmailAddressEffectiveFilters(project, email).keywordMode}
+                          onChange={e => void setAddressKeywordMode(email, e.target.value as KeywordMode)}
+                        >
+                          <option value="include">Include — keep when subject matches a phrase</option>
+                          <option value="exclude">Exclude — skip when subject matches a phrase</option>
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+
+          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wider text-brand-cloud/50">Add address</p>
+          <div className="mb-3 space-y-2 rounded-xl border border-white/10 bg-white/[0.02] p-3">
             <div className="flex gap-2">
               <input
-                className="flex-1 bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-xs text-brand-cloud placeholder-brand-cloud/35 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50"
+                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-brand-cloud placeholder-brand-cloud/35 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50"
                 value={emailInput}
                 onChange={e => setEmailInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && addEmail()}
                 placeholder="Email address…"
               />
-              <button type="button" onClick={addEmail} className="bg-white/[0.06] border border-white/10 hover:bg-white/[0.1] px-3 py-2 rounded-lg text-xs text-brand-cloud transition shrink-0">
+              <button
+                type="button"
+                onClick={addEmail}
+                className="shrink-0 rounded-lg border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-brand-cloud transition hover:bg-white/[0.1]"
+              >
                 Add
               </button>
             </div>
-            <p className="text-[11px] text-brand-cloud/45">Optional — only for this address</p>
+            <p className="text-[10px] text-brand-cloud/45">Optional filters for this address only</p>
             <input
-              className="w-full bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-xs text-brand-cloud placeholder-brand-cloud/35 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50"
+              className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-3 py-2 text-xs text-brand-cloud placeholder-brand-cloud/35 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50"
               value={newEmailKeywords}
               onChange={e => setNewEmailKeywords(e.target.value)}
-              placeholder="Subject must contain (comma-separated)…"
+              placeholder="Subject phrases, comma-separated…"
             />
+            <select
+              className="w-full rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 text-xs text-brand-cloud/90 outline-none focus:ring-1 focus:ring-brand-mint/50"
+              value={newEmailKeywordMode}
+              onChange={e => setNewEmailKeywordMode(e.target.value as KeywordMode)}
+            >
+              <option value="include">Include — sync only if subject matches a phrase</option>
+              <option value="exclude">Exclude — do not sync if subject matches a phrase</option>
+            </select>
             <label className="flex items-center gap-2 text-[11px] text-brand-cloud/55">
               <span className="shrink-0">On or after</span>
               <input
                 type="date"
-                className="flex-1 min-w-0 bg-white/[0.04] border border-white/10 rounded-lg px-3 py-1.5 text-xs outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50 text-brand-cloud/85"
+                className="min-w-0 flex-1 rounded-lg border border-white/10 bg-white/[0.04] px-3 py-1.5 text-xs text-brand-cloud/85 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50"
                 value={newEmailAfterDate}
                 onChange={e => setNewEmailAfterDate(e.target.value)}
               />
@@ -292,15 +501,28 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
                       key={thread.id}
                       className="rounded-lg border border-white/10 bg-white/[0.03] px-2 py-2 text-xs"
                     >
-                      <p className="font-medium text-brand-cloud/90 truncate" title={thread.subject || ''}>
-                        {thread.subject || '(no subject)'}
-                      </p>
-                      <p className="text-[11px] text-brand-cloud/45 mt-0.5">
-                        {(thread.messages?.length ?? 0)} message(s)
-                        {thread.last_message_date
-                          ? ` · last ${new Date(thread.last_message_date).toLocaleString()}`
-                          : ''}
-                      </p>
+                      <div className="flex items-start gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="font-medium text-brand-cloud/90 truncate" title={thread.subject || ''}>
+                            {thread.subject || '(no subject)'}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-brand-cloud/45">
+                            {(thread.messages?.length ?? 0)} message(s)
+                            {thread.last_message_date
+                              ? ` · last ${new Date(thread.last_message_date).toLocaleString()}`
+                              : ''}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={deletingThreadId === thread.id}
+                          title="Remove from this client only (mail stays in Gmail)"
+                          onClick={() => void removeSyncedThread(thread)}
+                          className="shrink-0 rounded-md border border-white/10 px-2 py-1 text-[11px] text-brand-cloud/50 transition hover:border-red-400/40 hover:bg-red-500/10 hover:text-red-200 disabled:opacity-40"
+                        >
+                          {deletingThreadId === thread.id ? '…' : 'Remove'}
+                        </button>
+                      </div>
                       {(thread.messages?.length ?? 0) > 0 && (
                         <ul className="mt-2 space-y-1 border-t border-white/5 pt-2 text-[11px] text-brand-cloud/60">
                           {thread.messages!.slice(-5).map(m => (
