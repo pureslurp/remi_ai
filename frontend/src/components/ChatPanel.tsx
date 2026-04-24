@@ -3,6 +3,7 @@ import { useAppStore } from '../store/appStore'
 import { useChat } from '../hooks/useChat'
 import * as api from '../api/client'
 import ChatMessageBubble from './ChatMessage'
+import UpgradePlanModal from './UpgradePlanModal'
 import type { AccountEntitlements, ChatMessage, Document, LlmOptionsResponse, Project } from '../types'
 
 interface Props {
@@ -46,6 +47,7 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
   const [attachedDocs, setAttachedDocs] = useState<{ id: string; filename: string }[]>([])
   const [mentionOpen, setMentionOpen] = useState(false)
   const [mentionQuery, setMentionQuery] = useState('')
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
 
   const mentionFiltered = useMemo(() => {
     const q = mentionQuery.trim().toLowerCase()
@@ -197,6 +199,7 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
     : null
 
   return (
+    <>
     <div className="flex flex-col h-full">
       <div className="px-6 py-4 border-b border-white/5 bg-black/20">
         <div className="flex items-start justify-between gap-2">
@@ -414,14 +417,13 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
               <p className="flex flex-wrap items-baseline justify-end gap-x-2 gap-y-0.5 text-[10px] leading-relaxed text-brand-cloud/28 sm:text-right sm:min-w-0 sm:max-w-[55%]">
                 <span className="min-w-0">{usageCaptionText.line}</span>
                 {entitlements?.upgrade_url ? (
-                  <a
-                    href={entitlements.upgrade_url}
-                    target="_blank"
-                    rel="noreferrer"
+                  <button
+                    type="button"
+                    onClick={() => setUpgradeOpen(true)}
                     className="shrink-0 text-brand-cloud/45 hover:text-brand-cloud/65 transition-colors underline-offset-[3px] hover:underline"
                   >
                     Upgrade
-                  </a>
+                  </button>
                 ) : null}
               </p>
             )}
@@ -429,5 +431,7 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
         </div>
       </div>
     </div>
+    <UpgradePlanModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
+    </>
   )
 }

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../store/appStore'
 import * as api from '../api/client'
 import SystemPromptSettings from './SystemPromptSettings'
+import UpgradePlanModal from './UpgradePlanModal'
 
 const PLAN_LABELS: Record<string, string> = {
   free: 'Free plan',
@@ -15,6 +16,7 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
   const { googleUser, googleConnected, authProvider } = useAppStore()
   const [open, setOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [billingBusy, setBillingBusy] = useState(false)
   const [subscriptionTier, setSubscriptionTier] = useState<string | null>(null)
   const [hasStripeSubscription, setHasStripeSubscription] = useState(false)
@@ -159,13 +161,13 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
               {billingBusy ? 'Opening billing…' : 'Manage billing…'}
             </button>
           ) : subscriptionTier === 'free' || subscriptionTier === 'trial' ? (
-            <a
-              href="/#pricing-heading"
-              onClick={() => setOpen(false)}
-              className="block px-3 py-2 text-sm text-brand-mint/90 hover:bg-white/[0.06] transition"
+            <button
+              type="button"
+              onClick={() => { setOpen(false); setUpgradeOpen(true) }}
+              className="w-full text-left px-3 py-2 text-sm text-brand-mint/90 hover:bg-white/[0.06] transition"
             >
               Upgrade plan
-            </a>
+            </button>
           ) : null}
           {!googleConnected && (
             <button
@@ -189,6 +191,7 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
         </div>
       )}
       <SystemPromptSettings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      <UpgradePlanModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
     </div>
   )
 }
