@@ -207,7 +207,8 @@ TRIAGE_MAX_EMAIL_THREADS = 50
 
 GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
-    "https://www.googleapis.com/auth/gmail.compose",
+    # gmail.compose — not requested in GCP for now; see gmail_service.create_gmail_draft
+    # "https://www.googleapis.com/auth/gmail.compose",
     "https://www.googleapis.com/auth/drive.readonly",
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",

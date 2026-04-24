@@ -51,8 +51,8 @@ export default function PrivacyPolicy() {
               <li>
                 <span className="text-brand-cloud/90 font-medium">Gmail data</span> — If you connect Gmail, Reco reads
                 email threads associated with your clients. We store thread subjects, participant addresses, message
-                dates, and body text in your account. We request read-only access and the ability to compose drafts.
-                We do not send emails on your behalf without your explicit action.
+                dates, and body text in your account. We request read-only access to your mail.
+                We do not send emails on your behalf.
               </li>
               <li>
                 <span className="text-brand-cloud/90 font-medium">Google Drive data</span> — If you connect a Drive
@@ -120,7 +120,6 @@ export default function PrivacyPolicy() {
             <p>Reco requests the following Google OAuth scopes:</p>
             <ul className="mt-3 space-y-2 font-mono text-xs text-brand-cloud/60">
               <li className="rounded-lg bg-white/[0.04] px-3 py-2">gmail.readonly — read email threads associated with your clients</li>
-              <li className="rounded-lg bg-white/[0.04] px-3 py-2">gmail.compose — create draft replies from within Reco</li>
               <li className="rounded-lg bg-white/[0.04] px-3 py-2">drive.readonly — read files in a folder you designate for a client</li>
               <li className="rounded-lg bg-white/[0.04] px-3 py-2">userinfo.email — identify your account</li>
               <li className="rounded-lg bg-white/[0.04] px-3 py-2">openid — authenticate your session</li>

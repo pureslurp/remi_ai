@@ -495,21 +495,30 @@ def delete_synced_email_thread(db: Session, *, project_id: str, thread_id: str) 
 
 
 def create_gmail_draft(to: str, subject: str, body: str) -> str:
-    """Create a Gmail draft and return a link to open it."""
-    import email.mime.text
-    from googleapiclient.discovery import build as google_build
+    """Create a Gmail draft and return a link to open it.
 
-    creds = _get_creds()
-    gmail = google_build("gmail", "v1", credentials=creds)
-
-    msg = email.mime.text.MIMEText(body)
-    msg["to"] = to
-    msg["subject"] = subject
-
-    raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
-    draft = gmail.users().drafts().create(
-        userId="me", body={"message": {"raw": raw}}
-    ).execute()
-
-    draft_id = draft.get("id", "")
-    return f"https://mail.google.com/mail/u/0/#drafts/{draft_id}"
+    Disabled until ``gmail.compose`` is re-added to ``config.GOOGLE_SCOPES`` and
+    registered in Google Cloud Console; otherwise the Gmail API returns 403.
+    """
+    raise RuntimeError(
+        "Gmail draft creation is disabled (gmail.compose scope not in use). "
+        "Restore the scope in config and the implementation below when ready."
+    )
+    # --- previous implementation (requires gmail.compose) ---
+    # import email.mime.text
+    # from googleapiclient.discovery import build as google_build
+    #
+    # creds = _get_creds()
+    # gmail = google_build("gmail", "v1", credentials=creds)
+    #
+    # msg = email.mime.text.MIMEText(body)
+    # msg["to"] = to
+    # msg["subject"] = subject
+    #
+    # raw = base64.urlsafe_b64encode(msg.as_bytes()).decode()
+    # draft = gmail.users().drafts().create(
+    #     userId="me", body={"message": {"raw": raw}}
+    # ).execute()
+    #
+    # draft_id = draft.get("id", "")
+    # return f"https://mail.google.com/mail/u/0/#drafts/{draft_id}"

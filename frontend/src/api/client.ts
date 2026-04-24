@@ -90,6 +90,7 @@ export const getMessages = (projectId: string) =>
   req<ChatMessage[]>(`/projects/${projectId}/messages`)
 export const clearMessages = (projectId: string) =>
   req<void>(`/projects/${projectId}/messages`, { method: 'DELETE' })
+// Backend returns 400 until gmail.compose is re-enabled (see backend/config.GOOGLE_SCOPES).
 export const draftEmail = (projectId: string, data: { to: string; subject: string; body: string }) =>
   req<{ draft_url: string }>(`/projects/${projectId}/chat/draft-email`, { method: 'POST', body: JSON.stringify(data) })
 
