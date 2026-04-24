@@ -284,11 +284,13 @@ def build_context_system(
         },
     ]
     if (conv_summary or "").strip():
+        # No cache_control here: Anthropic caps breakpoints at 4, and this block
+        # turns over every SUMMARY_TRIGGER_COUNT messages so it has the weakest
+        # cache value among the five system chunks.
         extra.append(
             {
                 "type": "text",
                 "text": "--- EARLIER CONVERSATION (SUMMARY) ---\n" + (conv_summary or "").strip(),
-                "cache_control": {"type": "ephemeral"},
             }
         )
     extra.extend(

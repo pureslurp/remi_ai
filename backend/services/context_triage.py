@@ -58,7 +58,7 @@ def _cheap_llm_string(prompt: str, *, max_out_tokens: int = 1024) -> str:
 
         c = Anthropic(api_key=anthropic_api_key())
         r = c.messages.create(
-            model="claude-3-5-haiku-20241022",
+            model="claude-haiku-4-5-20251001",
             max_tokens=max_out_tokens,
             messages=[{"role": "user", "content": prompt}],
         )

@@ -6,34 +6,73 @@ import type { ChatMessage as Msg, ChatReferencedItems } from '../types'
 
 interface Props {
   message: Msg
+  /** When true, show provider token counts from `referenced_items.admin_usage` (admins only). */
+  isAdmin?: boolean
 }
 
-function ReferencedBlock({ r }: { r: ChatReferencedItems }) {
+function ReferencedBlock({ r, isAdmin }: { r: ChatReferencedItems; isAdmin?: boolean }) {
   const hasDocs = r.documents && r.documents.length > 0
   const hasEmails = r.emails && r.emails.length > 0
   const fall = [r.doc_fallback, r.email_fallback].filter(Boolean)
-  if (!hasDocs && !hasEmails && fall.length === 0) return null
+  const u = isAdmin ? r.admin_usage : undefined
+  const hasContextList = hasDocs || hasEmails || fall.length > 0
+  if (!hasContextList && !u) return null
+
+  const summaryLabel =
+    hasContextList && u ? 'Context & tokens' : hasContextList ? 'Context used for this answer' : 'Tokens (admin)'
+
   return (
-    <div className="mt-3 pt-2 border-t border-white/10 text-[11px] text-brand-cloud/45">
-      <p className="font-medium text-brand-cloud/55 mb-1">Context used for this answer</p>
-      {hasDocs && (
-        <p className="mb-0.5">
-          <span className="text-brand-cloud/50">Documents: </span>
-          {r.documents!.map(d => d.label).join(', ')}
-        </p>
-      )}
-      {hasEmails && (
-        <p>
-          <span className="text-brand-cloud/50">Emails: </span>
-          {r.emails!.map(e => e.label).join(' · ')}
-        </p>
-      )}
-      {fall.length > 0 && <p className="mt-1 text-brand-cloud/30">(Fallback: {fall.join(', ')})</p>}
-    </div>
+    <details className="group mt-3 pt-2 border-t border-white/10 text-[11px] text-brand-cloud/45">
+      <summary
+        className="list-none cursor-pointer select-none flex items-center gap-1.5 font-medium text-brand-cloud/55 hover:text-brand-cloud/75 transition-colors [&::-webkit-details-marker]:hidden"
+      >
+        <svg
+          viewBox="0 0 12 12"
+          aria-hidden="true"
+          className="w-2.5 h-2.5 transition-transform duration-150 group-open:rotate-90 text-brand-cloud/40"
+        >
+          <path d="M4 2.5l3.5 3.5L4 9.5" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+        {summaryLabel}
+      </summary>
+      <div className="mt-2 pl-4">
+        {hasContextList && (
+          <>
+            {hasDocs && (
+              <p className="mb-0.5">
+                <span className="text-brand-cloud/50">Documents: </span>
+                {r.documents!.map(d => d.label).join(', ')}
+              </p>
+            )}
+            {hasEmails && (
+              <p>
+                <span className="text-brand-cloud/50">Emails: </span>
+                {r.emails!.map(e => e.label).join(' · ')}
+              </p>
+            )}
+            {fall.length > 0 && (
+              <p className="mt-1 text-brand-cloud/30">(Fallback: {fall.join(', ')})</p>
+            )}
+          </>
+        )}
+        {u && (
+          <div className={hasContextList ? 'mt-2 pt-2 border-t border-white/[0.07]' : ''}>
+            <p className="font-medium text-brand-cloud/55 mb-0.5">Tokens (admin)</p>
+            <p className="text-brand-cloud/50">
+              ~{u.input_tokens.toLocaleString()} in · ~{u.output_tokens.toLocaleString()} out ·{' '}
+              <span className="text-brand-cloud/65 tabular-nums">
+                {u.billable_units.toLocaleString()} billable units
+              </span>
+              <span className="text-brand-cloud/35"> — counts toward plan caps</span>
+            </p>
+          </div>
+        )}
+      </div>
+    </details>
   )
 }
 
-export default function ChatMessageBubble({ message }: Props) {
+export default function ChatMessageBubble({ message, isAdmin }: Props) {
   const isUser = message.role === 'user'
   const assistantMarkdown = useMemo(
     () => normalizeChatMarkdown(message.content),
@@ -123,7 +162,7 @@ export default function ChatMessageBubble({ message }: Props) {
           </ReactMarkdown>
         )}
         {!isUser && message.referenced_items && (
-          <ReferencedBlock r={message.referenced_items} />
+          <ReferencedBlock r={message.referenced_items} isAdmin={isAdmin} />
         )}
       </div>
     </div>

@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from config import MAX_TOKENS
 from database import SessionLocal, get_db
+from deps.auth import require_account
 from deps.project_access import ProjectForUser
 from models import Account, ChatMessage, Document, EmailThread, Project, ProjectConversationSummary, Transaction
 from schemas.chat import ChatMessageOut, ChatRequest, DraftEmailRequest
@@ -38,6 +39,7 @@ from services.llm_config import (
 from services.usage_entitlements import (
     assert_chat_allowed,
     increment_usage_after_chat_completion,
+    is_admin,
     subscription_tier,
 )
 
@@ -60,14 +62,41 @@ def _load_project_for_chat(db: Session, project_id: str) -> Project | None:
     )
 
 
+def _referenced_for_api(
+    referenced_items: dict | None, *, include_admin_usage: bool
+) -> dict | None:
+    if referenced_items is None:
+        return None
+    if include_admin_usage or "admin_usage" not in referenced_items:
+        return referenced_items
+    return {k: v for k, v in referenced_items.items() if k != "admin_usage"}
+
+
 @router.get("/messages", response_model=List[ChatMessageOut])
-def get_messages(project: ProjectForUser, db: Session = Depends(get_db)):
-    return (
+def get_messages(
+    project: ProjectForUser,
+    db: Session = Depends(get_db),
+    account_id: str = Depends(require_account),
+):
+    account = db.query(Account).filter_by(id=account_id).first()
+    show_admin = bool(account and is_admin(account))
+    rows = (
         db.query(ChatMessage)
         .filter_by(project_id=project.id)
         .order_by(ChatMessage.created_at.asc())
         .all()
     )
+    return [
+        ChatMessageOut(
+            id=m.id,
+            project_id=m.project_id,
+            role=m.role,
+            content=m.content,
+            created_at=m.created_at,
+            referenced_items=_referenced_for_api(m.referenced_items, include_admin_usage=show_admin),
+        )
+        for m in rows
+    ]
 
 
 @router.post("/chat")
@@ -209,6 +238,9 @@ async def chat(project: ProjectForUser, body: ChatRequest, request: Request, db:
     )
     assert_chat_allowed(account, db, preflight)
 
+    # Resolve before streaming: request `db` may close before the SSE generator runs.
+    attach_admin_usage_for_stream = is_admin(account)
+
     # Token breakdown (dev: surfaced in response headers for debugging)
     triage_d = f"doc~{doc_t_in}+{doc_t_out}" if (doc_t_in or doc_t_out) else "doc=0"
     triage_e = f"email~{e_t_in}+{e_t_out}" if (e_t_in or e_t_out) else "email=0"
@@ -242,6 +274,7 @@ async def chat(project: ProjectForUser, body: ChatRequest, request: Request, db:
                 model,
                 usage_out=usage,
                 assistant_referenced=ref_meta,
+                attach_admin_usage=attach_admin_usage_for_stream,
             ):
                 yield chunk
         finally:

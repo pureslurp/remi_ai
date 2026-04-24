@@ -251,9 +251,11 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
           </div>
         )}
         {messages.map(msg => (
-          <ChatMessageBubble key={msg.id} message={msg} />
+          <ChatMessageBubble key={msg.id} message={msg} isAdmin={!!entitlements?.is_admin} />
         ))}
-        {streamingMsg && <ChatMessageBubble message={streamingMsg} />}
+        {streamingMsg && (
+          <ChatMessageBubble message={streamingMsg} isAdmin={!!entitlements?.is_admin} />
+        )}
         {isStreaming && !streamingContent && (
           <div className="flex justify-start mb-4">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center text-xs font-semibold text-brand-cloud mr-2 shrink-0">

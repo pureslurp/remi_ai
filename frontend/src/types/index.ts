@@ -107,12 +107,21 @@ export interface Transaction {
   key_dates: KeyDate[]
 }
 
+/** Set server-side for ADMIN_EMAILS accounts only; stripped from API for others. */
+export type ChatAdminUsage = {
+  input_tokens: number
+  output_tokens: number
+  /** input + output × quota_output_multiplier — matches billing caps. */
+  billable_units: number
+}
+
 export type ChatReferencedItems = {
   documents?: { id: string; label: string; source?: string }[]
   emails?: { id: string; label: string; date?: string }[]
   doc_fallback?: string
   email_fallback?: string
   triage?: { documents_triage?: boolean; emails_triage?: boolean }
+  admin_usage?: ChatAdminUsage
 }
 
 export interface ChatMessage {

@@ -23,7 +23,7 @@ def _uniq(*items: str) -> tuple[str, ...]:
 
 
 MODEL_ALLOWLIST: dict[str, tuple[str, ...]] = {
-    "anthropic": _uniq(ANTHROPIC_MODEL, "claude-3-5-haiku-20241022"),
+    "anthropic": _uniq(ANTHROPIC_MODEL, "claude-haiku-4-5-20251001"),
     "openai": _uniq(OPENAI_CHAT_MODEL, "gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"),
     "gemini": _uniq(GEMINI_CHAT_MODEL, "gemini-2.0-flash", "gemini-1.5-flash"),
 }
@@ -135,7 +135,7 @@ def model_display_name(provider: str, model: str) -> str:
 # max/ultra  → frontier models (full allowlist)
 
 _FREE_TIER_MODELS: dict[str, tuple[str, ...]] = {
-    "anthropic": _uniq("claude-3-5-haiku-20241022"),
+    "anthropic": _uniq("claude-haiku-4-5-20251001"),
     "openai": _uniq("gpt-4o-mini", "gpt-4.1-mini"),
     "gemini": _uniq("gemini-2.0-flash", "gemini-1.5-flash"),
 }
@@ -144,7 +144,7 @@ _FREE_TIER_MODELS: dict[str, tuple[str, ...]] = {
 TRIAL_TIER_MODELS = _FREE_TIER_MODELS
 
 _PRO_TIER_MODELS: dict[str, tuple[str, ...]] = {
-    "anthropic": _uniq(ANTHROPIC_MODEL, "claude-3-5-haiku-20241022"),
+    "anthropic": _uniq(ANTHROPIC_MODEL, "claude-haiku-4-5-20251001"),
     "openai": _uniq(OPENAI_CHAT_MODEL, "gpt-4o", "gpt-4o-mini"),
     "gemini": _uniq(GEMINI_CHAT_MODEL, "gemini-2.0-flash", "gemini-1.5-flash"),
 }

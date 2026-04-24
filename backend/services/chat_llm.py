@@ -12,7 +12,7 @@ from starlette.requests import Request
 from config import MAX_TOKENS
 from database import SessionLocal
 from models import ChatMessage
-from services.chat_token_estimate import estimate_chat_input_tokens
+from services.chat_token_estimate import estimate_chat_input_tokens, raw_to_billable_units
 from services.llm_config import (
     anthropic_api_key,
     gemini_api_key,
@@ -80,20 +80,46 @@ async def stream_chat(
     model: str,
     usage_out: dict[str, int] | None = None,
     assistant_referenced: dict[str, Any] | None = None,
+    *,
+    attach_admin_usage: bool = False,
 ) -> AsyncGenerator[str, None]:
     if provider == "anthropic":
         async for chunk in _stream_anthropic(
-            project_id, user_message, system, history, request, model, usage_out, assistant_referenced
+            project_id,
+            user_message,
+            system,
+            history,
+            request,
+            model,
+            usage_out,
+            assistant_referenced,
+            attach_admin_usage=attach_admin_usage,
         ):
             yield chunk
     elif provider == "openai":
         async for chunk in _stream_openai(
-            project_id, user_message, system, history, request, model, usage_out, assistant_referenced
+            project_id,
+            user_message,
+            system,
+            history,
+            request,
+            model,
+            usage_out,
+            assistant_referenced,
+            attach_admin_usage=attach_admin_usage,
         ):
             yield chunk
     elif provider == "gemini":
         async for chunk in _stream_gemini(
-            project_id, user_message, system, history, request, model, usage_out, assistant_referenced
+            project_id,
+            user_message,
+            system,
+            history,
+            request,
+            model,
+            usage_out,
+            assistant_referenced,
+            attach_admin_usage=attach_admin_usage,
         ):
             yield chunk
     else:
@@ -105,9 +131,24 @@ def _persist_assistant(
     project_id: str,
     full_response: str,
     referenced_items: dict[str, Any] | None = None,
+    *,
+    usage_for_admin: dict[str, int] | None = None,
 ) -> None:
     if not full_response:
         return
+    ref_out: dict[str, Any] | None = None
+    if referenced_items is not None:
+        ref_out = dict(referenced_items)
+    elif usage_for_admin is not None:
+        ref_out = {}
+    if usage_for_admin is not None and ref_out is not None:
+        inp = max(0, int(usage_for_admin.get("input_tokens", 0) or 0))
+        out = max(0, int(usage_for_admin.get("output_tokens", 0) or 0))
+        ref_out["admin_usage"] = {
+            "input_tokens": inp,
+            "output_tokens": out,
+            "billable_units": raw_to_billable_units(inp, out),
+        }
     db = SessionLocal()
     try:
         db.add(
@@ -115,7 +156,7 @@ def _persist_assistant(
                 project_id=project_id,
                 role="assistant",
                 content=full_response,
-                referenced_items=referenced_items,
+                referenced_items=ref_out,
             )
         )
         db.commit()
@@ -132,6 +173,8 @@ async def _stream_anthropic(
     model: str,
     usage_out: dict[str, int] | None,
     assistant_referenced: dict[str, Any] | None = None,
+    *,
+    attach_admin_usage: bool = False,
 ) -> AsyncGenerator[str, None]:
     full_response = ""
     uo = usage_out if usage_out is not None else {}
@@ -162,7 +205,12 @@ async def _stream_anthropic(
         return
 
     _fill_usage_fallback(uo, system, history, user_message, full_response)
-    _persist_assistant(project_id, full_response, assistant_referenced)
+    _persist_assistant(
+        project_id,
+        full_response,
+        assistant_referenced,
+        usage_for_admin=uo if attach_admin_usage else None,
+    )
     yield "data: [DONE]\n\n"
 
 
@@ -175,6 +223,8 @@ async def _stream_openai(
     model: str,
     usage_out: dict[str, int] | None,
     assistant_referenced: dict[str, Any] | None = None,
+    *,
+    attach_admin_usage: bool = False,
 ) -> AsyncGenerator[str, None]:
     from openai import OpenAI
 
@@ -227,7 +277,12 @@ async def _stream_openai(
         return
 
     _fill_usage_fallback(uo, system, history, user_message, full_response)
-    _persist_assistant(project_id, full_response, assistant_referenced)
+    _persist_assistant(
+        project_id,
+        full_response,
+        assistant_referenced,
+        usage_for_admin=uo if attach_admin_usage else None,
+    )
     yield "data: [DONE]\n\n"
 
 
@@ -240,6 +295,8 @@ async def _stream_gemini(
     model: str,
     usage_out: dict[str, int] | None,
     assistant_referenced: dict[str, Any] | None = None,
+    *,
+    attach_admin_usage: bool = False,
 ) -> AsyncGenerator[str, None]:
     from google import genai
     from google.genai import types
@@ -286,5 +343,10 @@ async def _stream_gemini(
         return
 
     _fill_usage_fallback(uo, system, history, user_message, full_response)
-    _persist_assistant(project_id, full_response, assistant_referenced)
+    _persist_assistant(
+        project_id,
+        full_response,
+        assistant_referenced,
+        usage_for_admin=uo if attach_admin_usage else None,
+    )
     yield "data: [DONE]\n\n"
