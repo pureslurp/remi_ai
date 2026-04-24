@@ -1,13 +1,16 @@
+import shutil
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from config import PROJECTS_DIR
 from database import get_db
 from deps.auth import require_account
 from deps.project_access import ProjectForUser
-from models import Account, Project, Property
+from models import Account, Document, Project, Property
 from schemas.project import ProjectCreate, ProjectUpdate, ProjectOut
+from services import object_storage
 from services.llm_config import normalize_project_llm_for_account
 from services.usage_entitlements import subscription_tier
 
@@ -88,5 +91,18 @@ def update_project(
 
 @router.delete("/{project_id}", status_code=204)
 def delete_project(project: ProjectForUser, db: Session = Depends(get_db)):
+    pid = project.id
+    for doc in db.query(Document).filter(Document.project_id == pid).all():
+        object_storage.delete_file(doc.storage_object_key, pid, doc.filename)
+    # Break project → sale_property self-FK so ORM cascade can remove properties cleanly
+    project.sale_property_id = None
+    db.flush()
     db.delete(project)
     db.commit()
+    try:
+        proj_dir = (PROJECTS_DIR / pid).resolve()
+        proj_dir.relative_to(PROJECTS_DIR.resolve())
+        if proj_dir.is_dir():
+            shutil.rmtree(proj_dir, ignore_errors=True)
+    except (ValueError, OSError):
+        pass

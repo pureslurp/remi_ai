@@ -212,6 +212,18 @@ function IconPanelOff({ className }: { className?: string }) {
   )
 }
 
+function IconTrash({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M3 6h18M8 6V4a2 2 0 012-2h4a2 2 0 012 2v2m3 0v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6h14zM10 11v6M14 11v6"
+      />
+    </svg>
+  )
+}
+
 export type SidebarShell = 'expanded' | 'collapsed'
 
 type SidebarProps = {
@@ -229,6 +241,31 @@ export default function Sidebar({
 }: SidebarProps) {
   const { projects, activeProjectId, setProjects, setActiveProject } = useAppStore()
   const [showModal, setShowModal] = useState(false)
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const handleDeleteClient = async (p: Project) => {
+    if (
+      !window.confirm(
+        `Delete “${p.name}” permanently? This removes chat history, documents, synced email in Reco, and all other data for this client.`,
+      )
+    ) {
+      return
+    }
+    setDeletingId(p.id)
+    try {
+      await api.deleteProject(p.id)
+      const next = projects.filter(x => x.id !== p.id)
+      setProjects(next)
+      if (activeProjectId === p.id) {
+        setActiveProject(next[0]?.id ?? null)
+      }
+    } catch (e) {
+      console.error(e)
+      window.alert('Could not delete this client. Please try again.')
+    } finally {
+      setDeletingId(null)
+    }
+  }
 
   const handleCreated = (project: Project) => {
     setProjects([project, ...projects])
@@ -269,20 +306,35 @@ export default function Sidebar({
           )}
           {projects.map(p => {
             const isActive = activeProjectId === p.id
+            const busy = deletingId === p.id
             return (
-              <button
-                key={p.id}
-                type="button"
-                title={p.name}
-                onClick={() => setActiveProject(p.id)}
-                className={`w-10 h-10 shrink-0 rounded-xl text-[11px] font-semibold tracking-tight transition border ${
-                  isActive
-                    ? 'bg-brand-mint/20 border-brand-mint text-brand-cloud ring-1 ring-brand-mint/50'
-                    : 'bg-white/[0.04] border-white/10 text-brand-cloud/85 hover:bg-white/[0.08]'
-                }`}
-              >
-                {clientInitials(p.name)}
-              </button>
+              <div key={p.id} className="group relative h-10 w-10 shrink-0">
+                <button
+                  type="button"
+                  title={p.name}
+                  disabled={busy}
+                  onClick={() => setActiveProject(p.id)}
+                  className={`absolute inset-0 flex items-center justify-center rounded-xl text-[11px] font-semibold tracking-tight transition border ${
+                    isActive
+                      ? 'bg-brand-mint/20 border-brand-mint text-brand-cloud ring-1 ring-brand-mint/50'
+                      : 'bg-white/[0.04] border-white/10 text-brand-cloud/85 hover:bg-white/[0.08]'
+                  } ${busy ? 'opacity-40' : ''}`}
+                >
+                  {clientInitials(p.name)}
+                </button>
+                <button
+                  type="button"
+                  title="Delete client"
+                  disabled={busy}
+                  onClick={e => {
+                    e.stopPropagation()
+                    void handleDeleteClient(p)
+                  }}
+                  className="absolute bottom-0 right-0 z-10 flex h-[18px] w-[18px] items-center justify-center rounded-md border border-white/15 bg-brand-navy/95 text-brand-cloud/65 opacity-0 shadow-sm transition hover:border-red-400/50 hover:bg-red-950/90 hover:text-red-200 group-hover:opacity-100 focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-mint/45 disabled:pointer-events-none"
+                >
+                  <IconTrash className="h-2.5 w-2.5" />
+                </button>
+              </div>
             )
           })}
         </div>
@@ -354,32 +406,49 @@ export default function Sidebar({
         )}
         {projects.map(p => {
           const isActive = activeProjectId === p.id
+          const busy = deletingId === p.id
           return (
-            <button
+            <div
               key={p.id}
-              onClick={() => setActiveProject(p.id)}
-              className={`w-full text-left px-4 py-3 transition border-l-2 ${
-                isActive
-                  ? 'bg-white/[0.04] border-brand-mint'
-                  : 'border-transparent hover:bg-white/[0.02]'
+              className={`group flex w-full items-stretch border-l-2 transition ${
+                isActive ? 'bg-white/[0.04] border-brand-mint' : 'border-transparent hover:bg-white/[0.02]'
               }`}
             >
-              <div className="flex items-center gap-2">
-                <span className={`text-sm truncate flex-1 ${isActive ? 'text-brand-cloud font-medium' : 'text-brand-cloud/85'}`}>
-                  {p.name}
-                </span>
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full font-medium uppercase tracking-wide ${clientTypeSidebarPillClass(
-                    p.client_type,
-                  )}`}
-                >
-                  {p.client_type}
-                </span>
-              </div>
-              <p className="text-[11px] text-brand-cloud/40 mt-0.5">
-                {new Date(p.created_at).toLocaleDateString()}
-              </p>
-            </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setActiveProject(p.id)}
+                className="min-w-0 flex-1 px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-mint/35 disabled:opacity-40"
+              >
+                <div className="flex items-center gap-2">
+                  <span className={`text-sm truncate flex-1 ${isActive ? 'text-brand-cloud font-medium' : 'text-brand-cloud/85'}`}>
+                    {p.name}
+                  </span>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-medium uppercase tracking-wide ${clientTypeSidebarPillClass(
+                      p.client_type,
+                    )}`}
+                  >
+                    {p.client_type}
+                  </span>
+                </div>
+                <p className="text-[11px] text-brand-cloud/40 mt-0.5">
+                  {new Date(p.created_at).toLocaleDateString()}
+                </p>
+              </button>
+              <button
+                type="button"
+                title="Delete client"
+                disabled={busy}
+                onClick={e => {
+                  e.stopPropagation()
+                  void handleDeleteClient(p)
+                }}
+                className="shrink-0 px-2.5 text-brand-cloud/35 transition hover:bg-red-950/40 hover:text-red-300 group-hover:text-brand-cloud/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-mint/35 disabled:pointer-events-none"
+              >
+                <IconTrash className="mx-auto h-4 w-4" />
+              </button>
+            </div>
           )
         })}
       </div>
