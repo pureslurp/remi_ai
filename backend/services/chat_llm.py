@@ -79,20 +79,21 @@ async def stream_chat(
     provider: str,
     model: str,
     usage_out: dict[str, int] | None = None,
+    assistant_referenced: dict[str, Any] | None = None,
 ) -> AsyncGenerator[str, None]:
     if provider == "anthropic":
         async for chunk in _stream_anthropic(
-            project_id, user_message, system, history, request, model, usage_out
+            project_id, user_message, system, history, request, model, usage_out, assistant_referenced
         ):
             yield chunk
     elif provider == "openai":
         async for chunk in _stream_openai(
-            project_id, user_message, system, history, request, model, usage_out
+            project_id, user_message, system, history, request, model, usage_out, assistant_referenced
         ):
             yield chunk
     elif provider == "gemini":
         async for chunk in _stream_gemini(
-            project_id, user_message, system, history, request, model, usage_out
+            project_id, user_message, system, history, request, model, usage_out, assistant_referenced
         ):
             yield chunk
     else:
@@ -100,12 +101,23 @@ async def stream_chat(
         yield "data: [DONE]\n\n"
 
 
-def _persist_assistant(project_id: str, full_response: str) -> None:
+def _persist_assistant(
+    project_id: str,
+    full_response: str,
+    referenced_items: dict[str, Any] | None = None,
+) -> None:
     if not full_response:
         return
     db = SessionLocal()
     try:
-        db.add(ChatMessage(project_id=project_id, role="assistant", content=full_response))
+        db.add(
+            ChatMessage(
+                project_id=project_id,
+                role="assistant",
+                content=full_response,
+                referenced_items=referenced_items,
+            )
+        )
         db.commit()
     finally:
         db.close()
@@ -119,6 +131,7 @@ async def _stream_anthropic(
     request: Request,
     model: str,
     usage_out: dict[str, int] | None,
+    assistant_referenced: dict[str, Any] | None = None,
 ) -> AsyncGenerator[str, None]:
     full_response = ""
     uo = usage_out if usage_out is not None else {}
@@ -149,7 +162,7 @@ async def _stream_anthropic(
         return
 
     _fill_usage_fallback(uo, system, history, user_message, full_response)
-    _persist_assistant(project_id, full_response)
+    _persist_assistant(project_id, full_response, assistant_referenced)
     yield "data: [DONE]\n\n"
 
 
@@ -161,6 +174,7 @@ async def _stream_openai(
     request: Request,
     model: str,
     usage_out: dict[str, int] | None,
+    assistant_referenced: dict[str, Any] | None = None,
 ) -> AsyncGenerator[str, None]:
     from openai import OpenAI
 
@@ -213,7 +227,7 @@ async def _stream_openai(
         return
 
     _fill_usage_fallback(uo, system, history, user_message, full_response)
-    _persist_assistant(project_id, full_response)
+    _persist_assistant(project_id, full_response, assistant_referenced)
     yield "data: [DONE]\n\n"
 
 
@@ -225,6 +239,7 @@ async def _stream_gemini(
     request: Request,
     model: str,
     usage_out: dict[str, int] | None,
+    assistant_referenced: dict[str, Any] | None = None,
 ) -> AsyncGenerator[str, None]:
     from google import genai
     from google.genai import types
@@ -271,5 +286,5 @@ async def _stream_gemini(
         return
 
     _fill_usage_fallback(uo, system, history, user_message, full_response)
-    _persist_assistant(project_id, full_response)
+    _persist_assistant(project_id, full_response, assistant_referenced)
     yield "data: [DONE]\n\n"

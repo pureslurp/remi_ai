@@ -39,3 +39,9 @@ class Project(Base):
     email_threads = relationship("EmailThread", back_populates="project", cascade="all, delete-orphan")
     properties = relationship("Property", back_populates="project", cascade="all, delete-orphan", foreign_keys="[Property.project_id]")
     transactions = relationship("Transaction", back_populates="project", cascade="all, delete-orphan")
+    conversation_summary_row = relationship(
+        "ProjectConversationSummary",
+        back_populates="project",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )

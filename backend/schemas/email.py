@@ -21,6 +21,8 @@ class EmailThreadOut(BaseModel):
     participants: List[str]
     last_message_date: Optional[datetime]
     fetched_at: datetime
+    transaction_id: Optional[str] = None
+    tag_source: Optional[str] = None
     messages: List[EmailMessageOut] = []
 
     model_config = {"from_attributes": True}

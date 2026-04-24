@@ -197,8 +197,13 @@ BUDGET_TRANSACTION = 1_000
 BUDGET_PROFILE = 2_000
 BUDGET_DOCUMENTS = 80_000   # ~60 pages of PA packages, inspection reports, etc.
 BUDGET_EMAILS = 20_000
-BUDGET_HISTORY_MESSAGES = 20
+# Live chat turns sent to the main model; older content is in conversation summary
+BUDGET_HISTORY_MESSAGES = 10
 SUMMARY_TRIGGER_COUNT = 40
+# Pre-filter: include threads with activity in the last N days (union with active-tx tags)
+EMAIL_TRIAGE_DAYS = int(os.environ.get("EMAIL_TRIAGE_DAYS", "45") or "45")
+# Cap candidate email threads before LLM triage
+TRIAGE_MAX_EMAIL_THREADS = 50
 
 GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",

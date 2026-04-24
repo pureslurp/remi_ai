@@ -32,12 +32,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger("reco")
 
-if os.environ.get("GMAIL_SYNC_DEBUG", "").strip().lower() in ("1", "true", "yes"):
-    print(
-        "[gmail_sync] GMAIL_SYNC_DEBUG=1 — verbose lines print to this terminal on each Gmail sync.",
-        flush=True,
-    )
-
 from database import engine, Base
 import models  # ensure all ORM models are registered
 
@@ -104,6 +98,20 @@ def _bootstrap_sqlite() -> None:
             dcols = {row[1] for row in conn.execute(text("PRAGMA table_info(documents)")).fetchall()}
             if dcols and "storage_object_key" not in dcols:
                 conn.execute(text("ALTER TABLE documents ADD COLUMN storage_object_key VARCHAR"))
+                conn.commit()
+            if dcols and "short_summary" not in dcols:
+                conn.execute(text("ALTER TABLE documents ADD COLUMN short_summary TEXT"))
+                conn.commit()
+            etcols = {row[1] for row in conn.execute(text("PRAGMA table_info(email_threads)")).fetchall()}
+            if etcols and "transaction_id" not in etcols:
+                conn.execute(text("ALTER TABLE email_threads ADD COLUMN transaction_id VARCHAR"))
+                conn.commit()
+            if etcols and "tag_source" not in etcols:
+                conn.execute(text("ALTER TABLE email_threads ADD COLUMN tag_source VARCHAR"))
+                conn.commit()
+            mcols = {row[1] for row in conn.execute(text("PRAGMA table_info(chat_messages)")).fetchall()}
+            if mcols and "referenced_items" not in mcols:
+                conn.execute(text("ALTER TABLE chat_messages ADD COLUMN referenced_items JSON"))
                 conn.commit()
             tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()}
             if "accounts" not in tables:
@@ -203,6 +211,19 @@ def _bootstrap_sqlite() -> None:
                     text("ALTER TABLE projects ADD COLUMN gmail_keyword_mode VARCHAR DEFAULT 'include'")
                 )
                 conn.commit()
+            if "project_conversation_summaries" not in tables:
+                conn.execute(
+                    text(
+                        "CREATE TABLE project_conversation_summaries ("
+                        "project_id VARCHAR NOT NULL PRIMARY KEY, "
+                        "summary_text TEXT NOT NULL DEFAULT '', "
+                        "covered_message_id VARCHAR, "
+                        "updated_at DATETIME, "
+                        "FOREIGN KEY(project_id) REFERENCES projects (id) ON DELETE CASCADE, "
+                        "FOREIGN KEY(covered_message_id) REFERENCES chat_messages (id) ON DELETE SET NULL)"
+                    )
+                )
+                conn.commit()
             try:
                 conn.execute(
                     text("UPDATE google_oauth_credentials SET id = 'local' WHERE id = 'default'")
@@ -281,6 +302,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["X-Context-Breakdown", "X-Context-Tokens"],
 )
 # Runs outermost on the response path so headers apply after CORS.
 app.add_middleware(ApiNoCacheMiddleware)

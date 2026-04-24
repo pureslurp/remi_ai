@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Text, DateTime, ForeignKey
+from sqlalchemy import Column, String, Text, DateTime, ForeignKey, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime
 from uuid import uuid4
@@ -13,5 +13,7 @@ class ChatMessage(Base):
     role = Column(String, nullable=False)  # "user" | "assistant"
     content = Column(Text, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    # { "documents": [{ "id", "label" }], "emails": [{ "id", "label" }], "debug"?: ... }
+    referenced_items = Column(JSON, default=None)
 
     project = relationship("Project", back_populates="messages")
