@@ -53,6 +53,8 @@ export type AccountEntitlements = {
   pro_tokens_used: number
   pro_tokens_remaining: number
   pro_billing_month: string | null
+  /** True when email is in server ADMIN_EMAILS (unlimited; bypasses caps). */
+  is_admin?: boolean
   can_send_chat: boolean
   upgrade_url: string | null
   /** Output tokens count this many times toward caps (input = 1×). */

@@ -88,6 +88,7 @@ def _trial_period_expired(account: "Account") -> bool:
 
 def entitlements_payload(account: "Account") -> dict:
     """Public fields for GET /api/account/entitlements."""
+    admin = is_admin(account)
     tier = subscription_tier(account)
     trial_started = getattr(account, "trial_started_at", None)
     free_used = int(getattr(account, "trial_tokens_used", 0) or 0)
@@ -113,7 +114,11 @@ def entitlements_payload(account: "Account") -> dict:
         paid_remaining = 0
         paid_month_display = None
 
+    if admin:
+        can_send = True
+
     return {
+        "is_admin": admin,
         "subscription_tier": tier,
         # Free / trial fields (always present for backward compat)
         "trial_max_tokens": TRIAL_MAX_TOKENS,

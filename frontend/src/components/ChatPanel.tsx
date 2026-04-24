@@ -11,6 +11,9 @@ interface Props {
 }
 
 function usageCaption(e: AccountEntitlements): { line: string } {
+  if (e.is_admin) {
+    return { line: 'Unlimited usage (admin)' }
+  }
   if (e.subscription_tier === 'pro') {
     const cap = e.pro_included_tokens_per_month
     return {
