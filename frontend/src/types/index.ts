@@ -107,12 +107,21 @@ export interface Transaction {
   key_dates: KeyDate[]
 }
 
+export type ChatReferencedItems = {
+  documents?: { id: string; label: string; source?: string }[]
+  emails?: { id: string; label: string; date?: string }[]
+  doc_fallback?: string
+  email_fallback?: string
+  triage?: { documents_triage?: boolean; emails_triage?: boolean }
+}
+
 export interface ChatMessage {
   id: string
   project_id: string
   role: 'user' | 'assistant'
   content: string
   created_at: string
+  referenced_items?: ChatReferencedItems | null
 }
 
 export interface Document {
@@ -144,5 +153,7 @@ export interface EmailThread {
   participants: string[]
   last_message_date?: string
   fetched_at: string
+  transaction_id?: string | null
+  tag_source?: string | null
   messages?: EmailMessage[]
 }

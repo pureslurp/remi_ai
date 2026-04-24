@@ -1,16 +1,20 @@
-from datetime import datetime, timezone
+from datetime import datetime
+from typing import Any
+
 from sqlalchemy.orm import Session
 
-from models import Account, Project, Transaction, Document, EmailThread, ChatMessage
+from models import Account, Project, Transaction, Document, EmailThread, ChatMessage, ProjectConversationSummary
 from config import (
     BUDGET_TRANSACTION, BUDGET_PROFILE, BUDGET_DOCUMENTS,
     BUDGET_EMAILS, BUDGET_HISTORY_MESSAGES, ANTHROPIC_MODEL,
 )
 
-BASE_PERSONA = """You are Reco, an AI assistant for a Michigan real estate agent. You are an expert in Michigan real estate transactions, purchase agreements, addendums, negotiation strategy, and Michigan-specific requirements (Seller's Disclosure, PRE/tax uncapping, lead paint disclosure for pre-1978 homes). Be professional, precise, and cite specific documents or emails when you reference them."""
+BASE_PERSONA = """You are Reco, an AI assistant for a Michigan real estate agent. You are an expert in Michigan real estate transactions, purchase agreements, addendums, negotiation strategy, and Michigan-specific requirements (Seller's Disclosure, PRE/tax uncapping, lead paint disclosure for pre-1978 homes). Be professional, precise, and cite specific documents or emails when you reference them.
+
+Treat transaction-specific facts (who ordered what, what appears on title or closing docs, who is responsible for a given item) as established only when the synced documents, emails, transaction notes, or the agent's message in this chat support them; if not, say what is unknown and use conditional phrasing instead of filling gaps with confident assertions. The human agent is the licensed professional with file-specific and office knowledge—if they correct or narrow the situation, defer and revise without pushing back from generalities alone. When next steps are unclear, prefer verification paths (e.g. confirm on the title commitment or final CD once available) or optional checks over imperative vendor calls; if a single detail would change your answer, ask one focused clarifying question rather than assuming."""
 
 # Role-specific strategy (combined with BASE_PERSONA for each client). Keys match Project.client_type.
-STRATEGY_DEFAULT_BUYER = """Your focus for this client is the BUY side. Help the agent with buyer negotiations and leverage strategy, purchase agreement drafting and revisions, inspection and financing contingencies, addenda, appraisal and repair negotiations, coordinating title work and the lender (conditions, CD timing), walk-through issues, and closing readiness. Prioritize protecting the buyer while keeping the deal executable."""
+STRATEGY_DEFAULT_BUYER = """Your focus for this client is the BUY side. Help the agent with buyer negotiations and leverage strategy, purchase agreement drafting and revisions, inspection and financing contingencies, addenda, appraisal and repair negotiations, coordinating title and the lender as reflected in the contract and synced file (who selected title, split arrangements, conditions, CD timing), walk-through issues, and closing readiness. Prioritize protecting the buyer while keeping the deal executable."""
 
 STRATEGY_DEFAULT_SELLER = """Your focus for this client is the SELL side. Help the agent interpret and compare offers (price, concessions, contingencies, timelines), advise on counter strategy, listing and marketing angles, seller disclosures and Michigan forms, inspection response options, and keeping the transaction moving toward a clean closing."""
 
@@ -161,8 +165,100 @@ def build_emails_section(project: Project, token_budget: int) -> str:
     return "\n\n".join(sections) if sections else "No email content available."
 
 
-def build_system_prompt(project: Project, account: Account | None = None) -> list[dict]:
-    """Return a list of system content blocks with cache_control on stable sections."""
+def build_document_index(project: Project) -> str:
+    """Filenames and one-liners; used when the user @-attaches or triage returns a subset."""
+    docs = sorted(project.documents, key=lambda d: d.created_at, reverse=True)
+    if not docs:
+        return "No other documents."
+    lines: list[str] = []
+    for d in docs:
+        summ = (d.short_summary or d.filename or "?").replace("\n", " ")[:400]
+        lines.append(f"- {d.filename} ({d.source}): {summ}")
+    return "Other project documents (index only):\n" + "\n".join(lines)
+
+
+def build_documents_section_by_ids(
+    project: Project, document_ids: list[str], token_budget: int, *, also_index: bool
+) -> str:
+    if not document_ids and also_index:
+        return build_document_index(project)
+    id_set = {x for x in document_ids if x}
+    if not id_set and also_index:
+        return "No document bodies selected. " + build_document_index(project)
+    doc_map = {d.id: d for d in project.documents if d.id in id_set}
+    if not doc_map and also_index:
+        return "No document bodies could be loaded. " + build_document_index(project)
+
+    order = [i for i in document_ids if i in doc_map]
+    sections, used = [], 0
+    for doc_id in order:
+        if used >= token_budget:
+            break
+        doc = doc_map.get(doc_id)
+        if not doc or not doc.chunks:
+            continue
+        header = f"=== {doc.filename} ({doc.source}) ==="
+        text_parts: list[str] = []
+        for chunk in doc.chunks:
+            if used + (chunk.token_count or 0) > token_budget:
+                break
+            text_parts.append(chunk.text)
+            used += chunk.token_count or len(chunk.text) // 4
+        if text_parts:
+            sections.append(header + "\n" + "\n".join(text_parts))
+    body = "\n\n".join(sections) if sections else "No document bodies in selection."
+    if also_index and body:
+        return body + "\n\n" + build_document_index(project)
+    if also_index:
+        return build_document_index(project)
+    return body or "No documents in selection."
+
+
+def build_emails_section_by_ids(project: Project, thread_ids: list[str], token_budget: int) -> str:
+    tmap = {t.id: t for t in project.email_threads if t.id in set(thread_ids)}
+    order = [i for i in thread_ids if i in tmap]
+    if not order:
+        return "No email threads in selection."
+    sections, used = [], 0
+    for tid in order:
+        thread = tmap.get(tid)
+        if not thread:
+            continue
+        if used >= token_budget:
+            break
+        header = f"=== Thread: {thread.subject or '(no subject)'} ==="
+        msg_lines = []
+        for msg in reversed(thread.messages or ()):
+            line = (
+                f"[{_fmt_date(msg.date)}] From: {msg.from_addr or '?'}\n"
+                f"{msg.body_text or msg.snippet or ''}"
+            )
+            tokens = len(line) // 4
+            if used + tokens > token_budget:
+                break
+            msg_lines.append(line)
+            used += tokens
+        if msg_lines:
+            sections.append(header + "\n" + "\n---\n".join(msg_lines))
+    return "\n\n".join(sections) if sections else "No email content in selection."
+
+
+def get_conversation_summary_text(db: Session, project_id: str) -> str | None:
+    row = db.get(ProjectConversationSummary, project_id)
+    t = (row.summary_text or "").strip() if row else ""
+    if not t:
+        return None
+    return t
+
+
+def build_context_system(
+    project: Project,
+    account: Account | None = None,
+    doc_section: str = "",
+    email_section: str = "",
+    conv_summary: str | None = None,
+) -> list[dict[str, Any]]:
+    """Assemble system blocks (persona, profile, tx, optional summary, doc, email)."""
     today = datetime.now().strftime("%B %d, %Y")
     strategy = resolve_strategy_prompt(project, account)
     persona_block = (
@@ -171,8 +267,7 @@ def build_system_prompt(project: Project, account: Account | None = None) -> lis
         + strategy
         + f"\n\nToday's date: {today}."
     )
-
-    return [
+    extra: list[dict[str, Any]] = [
         {
             "type": "text",
             "text": persona_block,
@@ -187,17 +282,41 @@ def build_system_prompt(project: Project, account: Account | None = None) -> lis
             "text": "--- ACTIVE TRANSACTIONS ---\n" + build_transaction_section(project),
             "cache_control": {"type": "ephemeral"},
         },
-        {
-            "type": "text",
-            "text": "--- DOCUMENTS ---\n" + build_documents_section(project, BUDGET_DOCUMENTS),
-            "cache_control": {"type": "ephemeral"},
-        },
-        {
-            "type": "text",
-            "text": "--- EMAIL THREADS ---\n" + build_emails_section(project, BUDGET_EMAILS),
-            "cache_control": {"type": "ephemeral"},
-        },
     ]
+    if (conv_summary or "").strip():
+        extra.append(
+            {
+                "type": "text",
+                "text": "--- EARLIER CONVERSATION (SUMMARY) ---\n" + (conv_summary or "").strip(),
+                "cache_control": {"type": "ephemeral"},
+            }
+        )
+    extra.extend(
+        [
+            {
+                "type": "text",
+                "text": "--- DOCUMENTS ---\n" + (doc_section or "No documents."),
+                "cache_control": {"type": "ephemeral"},
+            },
+            {
+                "type": "text",
+                "text": "--- EMAIL THREADS ---\n" + (email_section or "No synced emails."),
+                "cache_control": {"type": "ephemeral"},
+            },
+        ]
+    )
+    return extra
+
+
+def build_system_prompt(project: Project, account: Account | None = None) -> list[dict[str, Any]]:
+    """Recency full-pack (no triage) — for tests and legacy call sites."""
+    return build_context_system(
+        project,
+        account,
+        build_documents_section(project, BUDGET_DOCUMENTS),
+        build_emails_section(project, BUDGET_EMAILS),
+        None,
+    )
 
 
 def load_history(project: Project, db: Session) -> list[dict]:

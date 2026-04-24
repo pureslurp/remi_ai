@@ -13,8 +13,12 @@ class EmailThread(Base):
     participants = Column(JSON, default=list)
     last_message_date = Column(DateTime)
     fetched_at = Column(DateTime, default=datetime.utcnow)
+    transaction_id = Column(String, ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True)
+    # "auto" | "manual" — if manual, sync does not overwrite tag
+    tag_source = Column(String, nullable=True)
 
     project = relationship("Project", back_populates="email_threads")
+    transaction = relationship("Transaction", backref="email_threads", foreign_keys=[transaction_id])
     messages = relationship("EmailMessage", back_populates="thread", cascade="all, delete-orphan",
                             order_by="EmailMessage.date")
 

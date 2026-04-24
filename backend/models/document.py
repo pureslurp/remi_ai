@@ -19,6 +19,8 @@ class Document(Base):
     file_hash = Column(String)  # SHA256 for dedup
     storage_object_key = Column(String)  # Supabase Storage path when using cloud files
     created_at = Column(DateTime, default=datetime.utcnow)
+    # One-line for triage / doc index (heuristic or LLM at ingest)
+    short_summary = Column(Text)
 
     project = relationship("Project", back_populates="documents")
     chunks = relationship("DocumentChunk", back_populates="document", cascade="all, delete-orphan",

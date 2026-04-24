@@ -1,7 +1,7 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useAppStore } from '../store/appStore'
 import * as api from '../api/client'
-import type { EmailThread, Project } from '../types'
+import type { EmailThread, Project, Transaction } from '../types'
 import { getClientPanelCopy } from '../lib/clientPanelCopy'
 import TransactionPanel from './TransactionPanel'
 import DocumentList from './DocumentList'
@@ -120,6 +120,7 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
   const [driveMsg, setDriveMsg] = useState('')
   const [clearConfirm, setClearConfirm] = useState(false)
   const [deletingThreadId, setDeletingThreadId] = useState<string | null>(null)
+  const [taggingThreadId, setTaggingThreadId] = useState<string | null>(null)
 
   useEffect(() => {
     setName(project.name)
@@ -241,7 +242,28 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
   }
 
   const gmailThreadsForProject = emailThreads.filter(t => t.project_id === project.id)
+  const projectTransactions = useMemo(
+    () => transactions.filter(t => t.project_id === project.id),
+    [transactions, project.id],
+  )
   const panelCopy = getClientPanelCopy(project.client_type)
+
+  const transactionLabel = (t: Transaction) => {
+    const addr = t.property_id ? properties.find(p => p.id === t.property_id)?.address : undefined
+    return (addr && String(addr).trim()) || t.status || t.id.slice(0, 8)
+  }
+
+  const tagThreadToTransaction = async (thread: EmailThread, transactionId: string | null) => {
+    setTaggingThreadId(thread.id)
+    try {
+      const updated = await api.tagEmailThread(project.id, thread.id, { transaction_id: transactionId })
+      setEmailThreads(emailThreads.map(th => (th.id === thread.id ? updated : th)))
+    } catch (err: unknown) {
+      setGmailMsg(err instanceof Error ? err.message : 'Could not update tag')
+    } finally {
+      setTaggingThreadId(null)
+    }
+  }
 
   const removeSyncedThread = async (thread: EmailThread) => {
     setDeletingThreadId(thread.id)
@@ -512,6 +534,28 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
                               ? ` · last ${new Date(thread.last_message_date).toLocaleString()}`
                               : ''}
                           </p>
+                          <label className="mt-2 block text-[10px] font-medium uppercase tracking-wider text-brand-cloud/40">
+                            Tag to transaction
+                            <select
+                              className="mt-1 w-full rounded-md border border-white/10 bg-white/[0.04] px-2 py-1.5 text-[11px] text-brand-cloud/90 outline-none focus:ring-1 focus:ring-brand-mint/40"
+                              value={thread.transaction_id ?? ''}
+                              disabled={taggingThreadId === thread.id}
+                              onChange={e => {
+                                const v = e.target.value
+                                void tagThreadToTransaction(thread, v === '' ? null : v)
+                              }}
+                            >
+                              <option value="">Unassigned</option>
+                              {projectTransactions.map(t => (
+                                <option key={t.id} value={t.id}>
+                                  {transactionLabel(t)}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          {thread.tag_source === 'manual' && (
+                            <p className="mt-1 text-[10px] text-brand-mint/70">Manual tag — resync won’t replace it</p>
+                          )}
                         </div>
                         <button
                           type="button"

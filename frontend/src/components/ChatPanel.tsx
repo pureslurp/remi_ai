@@ -1,9 +1,9 @@
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
 import { useAppStore } from '../store/appStore'
 import { useChat } from '../hooks/useChat'
 import * as api from '../api/client'
 import ChatMessageBubble from './ChatMessage'
-import type { AccountEntitlements, ChatMessage, LlmOptionsResponse, Project } from '../types'
+import type { AccountEntitlements, ChatMessage, Document, LlmOptionsResponse, Project } from '../types'
 
 interface Props {
   project: Pick<Project, 'id' | 'name' | 'llm_provider' | 'llm_model'>
@@ -29,7 +29,7 @@ function usageCaption(e: AccountEntitlements): { line: string } {
 export default function ChatPanel({ project, onProjectUpdated }: Props) {
   const projectId = project.id
   const projectName = project.name
-  const { messages, isStreaming, streamingContent } = useAppStore()
+  const { messages, isStreaming, streamingContent, setMessages, documents } = useAppStore()
   const { sendMessage, cancelStream } = useChat(projectId)
   const [input, setInput] = useState('')
   const [llmOpts, setLlmOpts] = useState<LlmOptionsResponse | null>(null)
@@ -38,6 +38,20 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
   const [entitlements, setEntitlements] = useState<AccountEntitlements | null>(null)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const projectDocs = useMemo(
+    () => documents.filter(d => d.project_id === projectId).sort((a, b) => a.filename.localeCompare(b.filename)),
+    [documents, projectId],
+  )
+  const [attachedDocs, setAttachedDocs] = useState<{ id: string; filename: string }[]>([])
+  const [mentionOpen, setMentionOpen] = useState(false)
+  const [mentionQuery, setMentionQuery] = useState('')
+
+  const mentionFiltered = useMemo(() => {
+    const q = mentionQuery.trim().toLowerCase()
+    if (!q) return projectDocs
+    return projectDocs.filter(d => d.filename.toLowerCase().includes(q))
+  }, [projectDocs, mentionQuery])
 
   const refreshEntitlements = useCallback(() => {
     void api.getAccountEntitlements().then(setEntitlements).catch(() => setEntitlements(null))
@@ -100,26 +114,82 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
     bottomRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' })
   }, [projectId, messages, streamingContent])
 
+  const pickDocument = (doc: Document) => {
+    setAttachedDocs(prev => (prev.some(p => p.id === doc.id) ? prev : [...prev, { id: doc.id, filename: doc.filename }]))
+    const el = textareaRef.current
+    if (el) {
+      const v = el.value
+      const cursor = el.selectionStart ?? v.length
+      const before = v.slice(0, cursor)
+      const after = v.slice(cursor)
+      const at = before.lastIndexOf('@')
+      if (at >= 0) {
+        setInput(before.slice(0, at) + after)
+        requestAnimationFrame(() => {
+          const pos = at
+          el.setSelectionRange(pos, pos)
+        })
+      }
+    }
+    setMentionOpen(false)
+    setMentionQuery('')
+  }
+
   const handleSend = async () => {
     const text = input.trim()
     if (!text || isStreaming || !canSendChat) return
     setInput('')
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
-    await sendMessage(text)
+    const atts = attachedDocs.map(d => ({ type: 'document' as const, id: d.id }))
+    setAttachedDocs([])
+    await sendMessage(text, atts.length ? { attachments: atts } : undefined)
     refreshEntitlements()
   }
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const startNewSession = async () => {
+    if (isStreaming || !canSendChat) return
+    if (messages.length === 0) return
+    if (!window.confirm('Start a new session? This clears the chat for this client (no undo).')) return
+    try {
+      await api.clearMessages(projectId)
+      setMessages([])
+    } catch {
+      /* error toast could go here */
+    }
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Escape' && mentionOpen) {
+      e.preventDefault()
+      setMentionOpen(false)
+      return
+    }
+    if (e.key === 'Enter' && !e.shiftKey && mentionOpen && mentionFiltered.length > 0) {
+      e.preventDefault()
+      pickDocument(mentionFiltered[0])
+      return
+    }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      handleSend()
+      void handleSend()
     }
   }
 
   const handleInput = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value)
-    e.target.style.height = 'auto'
-    e.target.style.height = Math.min(e.target.scrollHeight, 150) + 'px'
+    const v = e.target.value
+    setInput(v)
+    const el = e.target
+    const cursor = el.selectionStart ?? v.length
+    const before = v.slice(0, cursor)
+    const match = before.match(/(?:^|\s)@([^\s@]*)$/)
+    if (match) {
+      setMentionOpen(true)
+      setMentionQuery(match[1] ?? '')
+    } else {
+      setMentionOpen(false)
+    }
+    el.style.height = 'auto'
+    el.style.height = Math.min(el.scrollHeight, 150) + 'px'
   }
 
   const streamingMsg: ChatMessage | null = isStreaming && streamingContent
@@ -129,8 +199,23 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
   return (
     <div className="flex flex-col h-full">
       <div className="px-6 py-4 border-b border-white/5 bg-black/20">
-        <h2 className="font-semibold text-brand-cloud tracking-tight">{projectName}</h2>
-        <p className="text-[11px] uppercase tracking-[0.15em] text-brand-cloud/40 mt-0.5">Reco Pilot</p>
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <h2 className="font-semibold text-brand-cloud tracking-tight">{projectName}</h2>
+            <p className="text-[11px] uppercase tracking-[0.15em] text-brand-cloud/40 mt-0.5">Reco Pilot</p>
+          </div>
+          {messages.length > 0 && (
+            <button
+              type="button"
+              onClick={() => void startNewSession()}
+              disabled={isStreaming || !canSendChat}
+              className="shrink-0 text-[10px] px-2 py-1 rounded-md border border-white/15 text-brand-cloud/55 hover:text-brand-cloud/80 hover:border-white/25 transition disabled:opacity-40"
+              title="Clear chat and start a new session"
+            >
+              New session
+            </button>
+          )}
+        </div>
         {entitlements && !entitlements.can_send_chat && (
           <p className="mt-2 text-[11px] text-amber-200/90 leading-relaxed">
             You’ve reached your token allowance for now. Upgrade to Pro or add usage to keep chatting.
@@ -187,6 +272,56 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
       </div>
 
       <div className="px-4 pt-3 pb-2 border-t border-white/5 bg-black/20">
+        <p className="text-[10px] text-brand-cloud/35 mb-1.5 px-0.5">
+          Type <span className="text-brand-cloud/50">@</span> to attach a document for this message.
+        </p>
+        {attachedDocs.length > 0 && (
+          <div className="flex flex-wrap gap-1.5 mb-2">
+            {attachedDocs.map(d => (
+              <span
+                key={d.id}
+                className="inline-flex items-center gap-1 max-w-full rounded-md border border-brand-mint/25 bg-brand-mint/10 px-2 py-0.5 text-[11px] text-brand-cloud/90"
+              >
+                <span className="truncate">{d.filename}</span>
+                <button
+                  type="button"
+                  className="shrink-0 text-brand-cloud/50 hover:text-brand-cloud"
+                  disabled={isStreaming}
+                  onClick={() => setAttachedDocs(prev => prev.filter(x => x.id !== d.id))}
+                  aria-label={`Remove ${d.filename}`}
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
+        )}
+        <div className="relative">
+          {mentionOpen && (
+            <ul
+              className="absolute bottom-full left-0 right-0 z-20 mb-1 max-h-40 overflow-y-auto rounded-lg border border-white/15 bg-brand-navy/95 py-1 shadow-lg backdrop-blur-sm"
+              role="listbox"
+            >
+              {projectDocs.length === 0 ? (
+                <li className="px-2 py-1.5 text-[11px] text-brand-cloud/45">No documents for this client yet</li>
+              ) : mentionFiltered.length === 0 ? (
+                <li className="px-2 py-1.5 text-[11px] text-brand-cloud/45">No matching documents</li>
+              ) : (
+                mentionFiltered.slice(0, 12).map(d => (
+                  <li key={d.id}>
+                    <button
+                      type="button"
+                      className="w-full truncate px-2 py-1.5 text-left text-[11px] text-brand-cloud/90 hover:bg-white/10"
+                      onMouseDown={ev => ev.preventDefault()}
+                      onClick={() => pickDocument(d)}
+                    >
+                      {d.filename}
+                    </button>
+                  </li>
+                ))
+              )}
+            </ul>
+          )}
         <div className="flex items-end gap-2 bg-white/[0.04] backdrop-blur-sm border border-white/10 rounded-xl px-3 py-2 focus-within:border-brand-mint/40 transition">
           <textarea
             ref={textareaRef}
@@ -218,6 +353,7 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
               </svg>
             </button>
           )}
+        </div>
         </div>
         <div className="mt-1.5 mb-1 px-1 flex flex-col gap-1.5">
           <div className="flex flex-col gap-1.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3 min-w-0">

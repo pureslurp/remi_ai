@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { API_ROOT } from '../api/client'
+import { API_ROOT, getMessages } from '../api/client'
 import { useAppStore } from '../store/appStore'
 import type { ChatMessage } from '../types'
 
@@ -19,11 +19,15 @@ function quotaAssistantMarkdown(detail: QuotaDetail): string {
   return title + body + link
 }
 
+export type ChatSendOptions = {
+  attachments?: { type: 'document'; id: string }[]
+}
+
 export function useChat(projectId: string | null) {
-  const { setIsStreaming, setStreamingContent, addMessage } = useAppStore()
+  const { setIsStreaming, setStreamingContent, addMessage, setMessages } = useAppStore()
   const abortRef = useRef<AbortController | null>(null)
 
-  const sendMessage = async (text: string): Promise<boolean> => {
+  const sendMessage = async (text: string, opts?: ChatSendOptions): Promise<boolean> => {
     if (!projectId || !text.trim()) return false
 
     const userMsg: ChatMessage = {
@@ -45,7 +49,10 @@ export function useChat(projectId: string | null) {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify({
+          message: text,
+          attachments: opts?.attachments ?? [],
+        }),
         signal: abortRef.current.signal,
       })
 
@@ -68,6 +75,18 @@ export function useChat(projectId: string | null) {
           created_at: new Date().toISOString(),
         })
         return false
+      }
+
+      if (import.meta.env.DEV) {
+        const tok = res.headers.get('X-Context-Tokens')
+        if (tok) {
+          try {
+            const parsed = JSON.parse(tok) as Record<string, number>
+            console.info('[chat] X-Context-Tokens (est. input breakdown)', parsed)
+          } catch {
+            console.info('[chat] X-Context-Tokens', tok)
+          }
+        }
       }
 
       if (!res.ok) {
@@ -116,6 +135,7 @@ export function useChat(projectId: string | null) {
       }
 
       if (accumulated) {
+        // Optimistic assistant bubble; then replace with server state (ids + referenced_items)
         const assistantMsg: ChatMessage = {
           id: crypto.randomUUID(),
           project_id: projectId,
@@ -124,6 +144,12 @@ export function useChat(projectId: string | null) {
           created_at: new Date().toISOString(),
         }
         addMessage(assistantMsg)
+        try {
+          const serverMsgs = await getMessages(projectId)
+          setMessages(serverMsgs)
+        } catch {
+          /* keep optimistic */
+        }
       }
       return true
     } catch (err: unknown) {

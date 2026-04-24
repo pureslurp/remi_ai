@@ -2,10 +2,35 @@ import { useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { normalizeChatMarkdown } from '../lib/normalizeChatMarkdown'
-import type { ChatMessage as Msg } from '../types'
+import type { ChatMessage as Msg, ChatReferencedItems } from '../types'
 
 interface Props {
   message: Msg
+}
+
+function ReferencedBlock({ r }: { r: ChatReferencedItems }) {
+  const hasDocs = r.documents && r.documents.length > 0
+  const hasEmails = r.emails && r.emails.length > 0
+  const fall = [r.doc_fallback, r.email_fallback].filter(Boolean)
+  if (!hasDocs && !hasEmails && fall.length === 0) return null
+  return (
+    <div className="mt-3 pt-2 border-t border-white/10 text-[11px] text-brand-cloud/45">
+      <p className="font-medium text-brand-cloud/55 mb-1">Context used for this answer</p>
+      {hasDocs && (
+        <p className="mb-0.5">
+          <span className="text-brand-cloud/50">Documents: </span>
+          {r.documents!.map(d => d.label).join(', ')}
+        </p>
+      )}
+      {hasEmails && (
+        <p>
+          <span className="text-brand-cloud/50">Emails: </span>
+          {r.emails!.map(e => e.label).join(' · ')}
+        </p>
+      )}
+      {fall.length > 0 && <p className="mt-1 text-brand-cloud/30">(Fallback: {fall.join(', ')})</p>}
+    </div>
+  )
 }
 
 export default function ChatMessageBubble({ message }: Props) {
@@ -96,6 +121,9 @@ export default function ChatMessageBubble({ message }: Props) {
           >
             {assistantMarkdown}
           </ReactMarkdown>
+        )}
+        {!isUser && message.referenced_items && (
+          <ReferencedBlock r={message.referenced_items} />
         )}
       </div>
     </div>

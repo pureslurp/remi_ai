@@ -111,6 +111,8 @@ export const deleteDocument = (projectId: string, docId: string) =>
 // Gmail
 export const listEmails = (projectId: string) =>
   req<EmailThread[]>(`/projects/${projectId}/emails`)
+export const tagEmailThread = (projectId: string, threadId: string, data: { transaction_id: string | null }) =>
+  req<EmailThread>(`/projects/${projectId}/emails/${threadId}`, { method: 'PATCH', body: JSON.stringify(data) })
 export const deleteEmailThread = (projectId: string, threadId: string) =>
   req<void>(`/projects/${projectId}/emails/${threadId}`, { method: 'DELETE' })
 export const syncGmail = (projectId: string) =>

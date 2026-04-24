@@ -66,6 +66,16 @@ def _extract_text(content: bytes, mime_type: str, filename: str) -> str:
     return ""
 
 
+def _heuristic_short_summary(filename: str, first_chunk: str) -> str:
+    fn = (filename or "file").strip() or "document"
+    t = (first_chunk or "").replace("\n", " ").strip()
+    if not t:
+        return fn
+    if len(t) > 300:
+        t = t[:300] + "…"
+    return f"{fn} — {t}"
+
+
 def _chunk_text(text: str, chunk_tokens: int = 1000) -> list[str]:
     """Split text into ~chunk_tokens-sized chunks at sentence boundaries."""
     # Approx 4 chars per token
@@ -119,6 +129,10 @@ def process_upload(project_id: str, filename: str, content: bytes,
     for i, chunk in enumerate(chunks_text):
         token_count = len(chunk) // 4
         db.add(DocumentChunk(document_id=doc.id, chunk_index=i, text=chunk, token_count=token_count))
+    if chunks_text:
+        doc.short_summary = _heuristic_short_summary(filename, chunks_text[0])
+    else:
+        doc.short_summary = _heuristic_short_summary(filename, text[:2000] if text else "")
 
     db.commit()
     db.refresh(doc)
@@ -174,6 +188,10 @@ def process_bytes(project_id: str, filename: str, content: bytes,
     for i, chunk in enumerate(chunks_text):
         db.add(DocumentChunk(document_id=doc.id, chunk_index=i, text=chunk,
                              token_count=len(chunk) // 4))
+    if chunks_text:
+        doc.short_summary = _heuristic_short_summary(filename, chunks_text[0])
+    else:
+        doc.short_summary = _heuristic_short_summary(filename, text[:2000] if text else "")
 
     db.commit()
     db.refresh(doc)
