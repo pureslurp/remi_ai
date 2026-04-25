@@ -246,7 +246,7 @@ export default function Sidebar({
   const handleDeleteClient = async (p: Project) => {
     if (
       !window.confirm(
-        `Delete “${p.name}” permanently? This removes chat history, documents, synced email in Reco, and all other data for this client.`,
+        `Delete “${p.name}” permanently? This removes chat history, documents, synced email in reco-pilot, and all other data for this client.`,
       )
     ) {
       return
@@ -289,7 +289,7 @@ export default function Sidebar({
           <IconChevronRight className="w-5 h-5" />
         </button>
         <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center shrink-0">
-          <span className="text-brand-cloud text-sm font-semibold tracking-tight">R</span>
+          <span className="text-brand-cloud text-xs font-semibold tracking-tight">r.</span>
         </div>
         <button
           type="button"
@@ -363,9 +363,9 @@ export default function Sidebar({
         <div className="flex items-start justify-between gap-2 mb-3">
           <div className="flex items-center gap-2 min-w-0">
             <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center shrink-0">
-              <span className="text-brand-cloud text-sm font-semibold tracking-tight">R</span>
+              <span className="text-brand-cloud text-xs font-semibold tracking-tight">r.</span>
             </div>
-            <h1 className="font-display text-xl font-semibold text-brand-cloud tracking-tight truncate">Reco</h1>
+            <h1 className="font-wordmark-app text-xl font-semibold text-brand-cloud tracking-[0.06em] truncate">reco-pilot</h1>
           </div>
           <div className="flex shrink-0 gap-0.5">
             {onCollapseToRail && (

@@ -23,10 +23,10 @@
       dominant-baseline="central"
       fill="#f4f4f5"
       font-family="Georgia, 'Times New Roman', serif"
-      font-size="56"
+      font-size="48"
       font-weight="600"
       letter-spacing="-0.03em"
-    >R</text>
+    >r.</text>
   </g>
   <text
     x="252"
@@ -36,7 +36,7 @@
     font-size="72"
     font-weight="700"
     letter-spacing="-0.03em"
-  >Reco</text>
+  >reco-pilot</text>
   <text
     x="96"
     y="410"
@@ -45,5 +45,5 @@
     font-size="32"
     font-weight="500"
     letter-spacing="-0.01em"
-  >AI workspace for real estate agents  client context, email, and docs in one place.</text>
+  >AI workspace for real estate agents — client context, email, and docs in one place.</text>
 </svg>

@@ -1,5 +1,5 @@
 /**
- * Paints the Chrome tab favicon from the same visual recipe as <RecoMark variant="landing" />:
+ * Paints the Chrome tab favicon from the same visual recipe as <RecoMark variant="landing" /> (r. glyph):
  * 44px header tile scaled to 32×32, Cormorant Garamond 600 after document fonts load.
  */
 const OUT = 32
@@ -52,7 +52,7 @@ function drawRecoMarkPng(): string | null {
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'
   ctx.font = `600 ${FONT_PX}px "Cormorant Garamond", Georgia, serif`
-  ctx.fillText('R', OUT / 2, OUT / 2 + 0.25)
+  ctx.fillText('r.', OUT / 2, OUT / 2 + 0.25)
 
   return canvas.toDataURL('image/png')
 }

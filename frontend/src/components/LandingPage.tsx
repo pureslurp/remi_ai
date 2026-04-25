@@ -151,7 +151,7 @@ function AuthModal({ mode, initialPlan = 'free', onClose, onModeChange, onEmailA
           {mode === 'signup' ? 'Create your account' : 'Welcome back'}
         </h2>
         <p className="mt-1 text-sm text-brand-cloud/50">
-          {mode === 'signup' ? 'Start for free — no credit card required.' : 'Sign in to your Reco workspace.'}
+          {mode === 'signup' ? 'Start for free — no credit card required.' : 'Sign in to your reco-pilot workspace.'}
         </p>
 
         {/* Plan selector — signup only */}
@@ -363,7 +363,7 @@ export default function LandingPage({ needsDeviceLink, onEmailAuth }: Props) {
   const salesRaw = import.meta.env.VITE_SALES_EMAIL
   const salesEmail = typeof salesRaw === 'string' ? salesRaw.trim() : ''
   const brokerageMailto = salesEmail
-    ? `mailto:${salesEmail}?subject=${encodeURIComponent('Reco — Brokerage inquiry')}`
+    ? `mailto:${salesEmail}?subject=${encodeURIComponent('reco-pilot — Brokerage inquiry')}`
     : null
 
   return (
@@ -399,7 +399,7 @@ export default function LandingPage({ needsDeviceLink, onEmailAuth }: Props) {
         <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
           <div className="landing-rise flex items-center gap-3" style={{ animationDelay: '0ms' }}>
             <RecoMark variant="landing" />
-            <span className="font-landing-display text-2xl font-semibold tracking-tight text-brand-cloud">Reco</span>
+            <span className="font-wordmark text-2xl font-semibold tracking-[0.07em] text-brand-cloud">reco-pilot</span>
           </div>
           <nav className="landing-rise flex items-center gap-2 sm:gap-3" style={{ animationDelay: '60ms' }} aria-label="Account">
             <button
@@ -451,7 +451,7 @@ export default function LandingPage({ needsDeviceLink, onEmailAuth }: Props) {
               className="landing-rise mt-6 max-w-xl text-base leading-relaxed text-brand-cloud/65 sm:text-lg"
               style={{ animationDelay: '160ms' }}
             >
-              Reco gives each client their own memory. It answers from your email and synced documents, so you
+              reco-pilot gives each client their own memory. It answers from your email and synced documents, so you
               aren&apos;t explaining the deal from scratch every time you open a chat.
             </p>
             <div
@@ -675,10 +675,10 @@ export default function LandingPage({ needsDeviceLink, onEmailAuth }: Props) {
       <footer className="relative border-t border-white/[0.06] px-5 py-10 sm:px-8">
         <div className="mx-auto max-w-6xl text-center text-xs leading-relaxed text-brand-cloud/40">
           <p>
-            Email and document sync are optional and only bring in what you choose. Reco is not affiliated with Google,
+            Email and document sync are optional and only bring in what you choose. reco-pilot is not affiliated with Google,
             Anthropic, OpenAI, or Google DeepMind.
           </p>
-          <p className="mt-3 font-landing-display text-sm text-brand-cloud/50">Reco</p>
+          <p className="mt-3 font-wordmark text-sm font-medium tracking-[0.1em] text-brand-cloud/50">reco-pilot</p>
           <p className="mt-2 flex items-center justify-center gap-4">
             <a href="/privacy" className="hover:text-brand-cloud/70 transition">Privacy Policy</a>
             <span aria-hidden>·</span>

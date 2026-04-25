@@ -335,10 +335,13 @@ export default function App() {
         ) : (
           <div className="flex-1 min-w-[240px] min-h-0 flex items-center justify-center overflow-auto">
             <div className="text-center px-6">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center text-3xl font-semibold mx-auto mb-5 text-brand-cloud tracking-tight">
-                R
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center text-2xl font-semibold mx-auto mb-5 text-brand-cloud tracking-tight font-landing-display">
+                r.
               </div>
-              <h2 className="text-xl font-semibold text-brand-cloud mb-1 tracking-tight">Welcome to Reco</h2>
+              <h2 className="text-xl font-semibold text-brand-cloud mb-1 tracking-tight">
+                Welcome to{' '}
+                <span className="font-wordmark-app tracking-[0.06em]">reco-pilot</span>
+              </h2>
               <p className="text-brand-cloud/60 text-sm">Create your first client in the sidebar to get started.</p>
               {sidebarMode === 'hidden' && (
                 <p className="text-brand-cloud/40 text-xs mt-3 max-w-sm mx-auto">

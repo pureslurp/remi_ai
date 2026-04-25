@@ -803,7 +803,7 @@ export default function LandingAppPreview() {
       <div
         className="overflow-hidden rounded-2xl border border-white/10 bg-black/40 shadow-2xl ring-1 ring-white/5"
         role="region"
-        aria-label="Reco workspace layout preview"
+        aria-label="reco-pilot workspace layout preview"
       >
         <div className="flex items-center gap-2 border-b border-white/5 bg-black/35 px-3 py-2">
           <span className="h-2.5 w-2.5 rounded-full bg-red-400/70" aria-hidden />
@@ -818,9 +818,9 @@ export default function LandingAppPreview() {
             <div className="shrink-0 border-b border-white/5 p-3">
               <div className="mb-2 flex items-center gap-2">
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-gradient-to-br from-brand-navy to-brand-slate">
-                  <span className="text-[10px] font-semibold tracking-tight text-brand-cloud">R</span>
+                  <span className="text-[9px] font-semibold tracking-tight text-brand-cloud">r.</span>
                 </div>
-                <span className="truncate font-display text-sm font-semibold tracking-tight text-brand-cloud">Reco</span>
+                <span className="truncate font-wordmark-app text-sm font-semibold tracking-[0.06em] text-brand-cloud">reco-pilot</span>
               </div>
               <div className="rounded-lg border border-white/10 bg-white/[0.05] py-1.5 text-center text-[10px] font-medium text-brand-cloud/70">
                 + New Client
@@ -949,7 +949,7 @@ export default function LandingAppPreview() {
             >
               <div className="shrink-0 border-b border-white/5 bg-black/20 px-4 py-2.5">
                 <h3 className="text-[12px] font-semibold tracking-tight text-brand-cloud">{client.name}</h3>
-                <p className="mt-0.5 text-[9px] uppercase tracking-[0.15em] text-brand-cloud/40">Reco Pilot</p>
+                <p className="mt-0.5 font-wordmark-app text-[9px] font-medium tracking-[0.08em] text-brand-cloud/40">reco-pilot</p>
               </div>
               <div
                 ref={chatScrollRef}
@@ -966,8 +966,8 @@ export default function LandingAppPreview() {
                     </div>
                   ) : (
                     <div key={idx} className="flex justify-start">
-                      <div className="mr-1.5 mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-gradient-to-br from-brand-navy to-brand-slate text-[9px] font-semibold tracking-tight text-brand-cloud">
-                        R
+                      <div className="mr-1.5 mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-gradient-to-br from-brand-navy to-brand-slate text-[8px] font-semibold tracking-tight text-brand-cloud">
+                        r.
                       </div>
                       <div className="min-w-0 max-w-[92%] rounded-2xl rounded-bl-sm border border-white/10 bg-white/[0.03] px-3 py-2 text-brand-cloud/90 backdrop-blur-sm">
                         <ReactMarkdown remarkPlugins={[remarkGfm]} components={previewAssistantMarkdownComponents}>
@@ -981,7 +981,7 @@ export default function LandingAppPreview() {
               </div>
               <div className="shrink-0 border-t border-white/5 bg-black/20 px-3 py-2">
                 <div className="flex items-end gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 backdrop-blur-sm">
-                  <div className="flex-1 py-0.5 text-[10px] text-brand-cloud/35">Ask Reco about this client…</div>
+                  <div className="flex-1 py-0.5 text-[10px] text-brand-cloud/35">Ask reco-pilot about this client…</div>
                   <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-brand-mint/50" aria-hidden>
                     <svg className="h-3 w-3 rotate-90 text-brand-navy/60" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
@@ -1015,10 +1015,10 @@ export default function LandingAppPreview() {
         >
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-brand-cloud/45">Why it feels grounded</p>
           <p className="text-[11px] leading-relaxed text-brand-cloud/60">
-            Reco builds prompts from the same objects you see in the workspace — message subjects from synced email, file names from
-            folder sync and uploads, plus deal dates. In this preview, open the <strong className="text-brand-cloud/80">Sources</strong> tab on
-            small screens or use the <strong className="text-brand-cloud/80">right rail</strong> on wider layouts. The assistant is nudged to{' '}
-            <strong className="text-brand-cloud/80">name those sources</strong> when it reasons so you can verify fast.
+            reco-pilot pulls from what is already on screen: email subjects, filenames from sync and uploads, and the
+            dates you typed in. On a phone, use the <strong className="text-brand-cloud/80">Sources</strong> tab; on a wide layout,
+            poke around the <strong className="text-brand-cloud/80">right rail</strong>. When the model answers, it
+            should name the thread or file it leaned on so you are not guessing.
           </p>
         </div>
         <div
@@ -1028,25 +1028,25 @@ export default function LandingAppPreview() {
         >
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-brand-cloud/45">Try it here</p>
           <p className="text-[11px] leading-relaxed text-brand-cloud/60">
-            Pick another client from the <strong className="text-brand-cloud/80">sidebar</strong> (desktop) or the{' '}
-            <strong className="text-brand-cloud/80">client row</strong> under Chat (mobile) — each has a longer sample thread you can{' '}
-            <strong className="text-brand-cloud/80">scroll inside the chat pane</strong>. On mobile, use the <strong className="text-brand-cloud/80">Sources</strong> tab to
-            see synced email and documents for the selected client.
+            Switch clients from the <strong className="text-brand-cloud/80">sidebar</strong> on desktop, or the row
+            under <strong className="text-brand-cloud/80">Chat</strong> on mobile. Each fake client ships with a longer
+            thread; scroll inside the chat panel to read it. On mobile, <strong className="text-brand-cloud/80">Sources</strong>{' '}
+            shows the sample mail and docs for whoever you picked.
           </p>
         </div>
         <div
           className="rounded-2xl border border-white/10 bg-black/35 p-4 font-sans shadow-lg ring-1 ring-white/5 md:col-span-2"
           role="region"
-          aria-label="Custom AI system prompts"
+          aria-label="Custom style prompts for the assistant"
         >
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-brand-cloud/45">Custom system prompts</p>
+          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-brand-cloud/45">Custom style prompts</p>
           <p className="text-[11px] leading-relaxed text-brand-cloud/60">
-            After sign-in, open <strong className="text-brand-cloud/80">AI prompt settings</strong> from your profile menu
-            to override the assistant’s system prompt separately for{' '}
-            <strong className="text-brand-cloud/80">buyer</strong>, <strong className="text-brand-cloud/80">seller</strong>,
-            and <strong className="text-brand-cloud/80">{'buyer & seller'}</strong> workspaces. Use it to steer negotiation
-            style—more collaborative or more direct—how concise replies should be, and when to lean on synced email and
-            documents versus general advice. Reset to defaults anytime.
+            After sign-in, open <strong className="text-brand-cloud/80">AI prompt settings</strong> from your profile.
+            You get separate defaults for <strong className="text-brand-cloud/80">buyer</strong>,{' '}
+            <strong className="text-brand-cloud/80">seller</strong>, and{' '}
+            <strong className="text-brand-cloud/80">buyer & seller</strong> workspaces: tone (collaborative vs. blunt),
+            how tight you want answers, and how hard to lean on your synced mail and files instead of generic advice. If
+            it goes sideways, reset to the stock prompts in one click.
           </p>
         </div>
       </div>

@@ -1,5 +1,5 @@
 /**
- * Reco “R” tile — same markup as the landing header mark. Use everywhere this
+ * reco-pilot “r.” tile — same markup as the landing header mark. Use everywhere this
  * glyph should match (landing, legal headers, favicon paint source of truth).
  */
 type RecoMarkVariant = 'landing' | 'legal'
@@ -25,7 +25,7 @@ export function RecoMark({ variant = 'landing', className = '' }: Props) {
   const extra = className.trim()
   return (
     <div className={extra ? `${WRAP[variant]} ${extra}` : WRAP[variant]} aria-hidden>
-      <span className={LETTER[variant]}>R</span>
+      <span className={LETTER[variant]}>r.</span>
     </div>
   )
 }

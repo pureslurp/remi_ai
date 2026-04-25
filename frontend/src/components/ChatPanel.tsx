@@ -246,7 +246,7 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
         <div className="flex items-start justify-between gap-2">
           <div>
             <h2 className="font-semibold text-brand-cloud tracking-tight">{projectName}</h2>
-            <p className="text-[11px] uppercase tracking-[0.15em] text-brand-cloud/40 mt-0.5">Reco Pilot</p>
+            <p className="font-wordmark-app text-[11px] font-medium tracking-[0.08em] text-brand-cloud/40 mt-0.5">reco-pilot</p>
           </div>
           {messages.length > 0 && (
             <button
@@ -313,11 +313,11 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
       >
         {messages.length === 0 && !isStreaming && (
           <div className="flex flex-col items-center justify-center h-full text-center">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center text-2xl font-semibold text-brand-cloud tracking-tight mb-4">
-              R
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center text-xl font-semibold text-brand-cloud tracking-tight mb-4">
+              r.
             </div>
             <p className="text-brand-cloud/70 text-sm">
-              Ask Reco anything about <span className="text-brand-cloud font-medium">{projectName}</span>
+              Ask reco-pilot anything about <span className="text-brand-cloud font-medium">{projectName}</span>
             </p>
             <p className="text-brand-cloud/40 text-xs mt-1">
               Offers, negotiations, purchase agreements, market analysis…
@@ -332,8 +332,8 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
         )}
         {isStreaming && !streamingContent && (
           <div className="flex justify-start mb-4">
-            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center text-xs font-semibold text-brand-cloud mr-2 shrink-0">
-              R
+            <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center text-[11px] font-semibold text-brand-cloud mr-2 shrink-0">
+              r.
             </div>
             <div className="bg-white/[0.03] backdrop-blur-sm border border-white/10 rounded-2xl rounded-bl-sm px-4 py-3">
               <div className="flex gap-1">
@@ -405,7 +405,7 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
             onChange={handleInput}
             onKeyDown={handleKeyDown}
             disabled={isStreaming || !canSendChat}
-            placeholder="Ask Reco about this client… (Enter to send, Shift+Enter for newline)"
+            placeholder="Ask reco-pilot about this client… (Enter to send, Shift+Enter for newline)"
             rows={1}
             className="flex-1 bg-transparent resize-none outline-none text-sm text-brand-cloud placeholder-brand-cloud/35 py-1 max-h-[150px] disabled:opacity-50"
           />

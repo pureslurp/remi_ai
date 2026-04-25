@@ -82,8 +82,8 @@ export default function ChatMessageBubble({ message, isAdmin }: Props) {
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-4`}>
       {!isUser && (
-        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center text-xs font-semibold text-brand-cloud mr-2 mt-1 shrink-0 tracking-tight">
-          R
+        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center text-[11px] font-semibold text-brand-cloud mr-2 mt-1 shrink-0 tracking-tight">
+          r.
         </div>
       )}
       <div

@@ -15,6 +15,10 @@ const config: Config = {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         display: ['Inter', 'system-ui', 'sans-serif'],
+        /** Product name on marketing + legal — matches `landingSans` (Manrope). */
+        wordmark: ['Manrope', 'system-ui', 'sans-serif'],
+        /** Product name inside the signed-in app — matches `display` / body (Inter). */
+        wordmarkApp: ['Inter', 'system-ui', 'sans-serif'],
         landingDisplay: ['"Cormorant Garamond"', 'Georgia', 'serif'],
         landingSans: ['Manrope', 'system-ui', 'sans-serif'],
       },
