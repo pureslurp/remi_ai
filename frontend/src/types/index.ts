@@ -66,6 +66,8 @@ export type AccountEntitlements = {
   subscription_status: 'active' | 'past_due' | 'canceled' | 'trialing' | null
   subscription_current_period_end: string | null
   subscription_cancel_at_period_end: boolean
+  /** Paid tier after the current period when a downgrade is scheduled; absent on older API responses. */
+  subscription_scheduled_plan?: 'pro' | 'max' | 'ultra' | null
 }
 
 export interface Property {

@@ -68,6 +68,9 @@ export default function ManageBillingModal({
   const currentRank = isPaidPlan ? TIER_RANK[currentPlan as Plan] : 0
   const cancelAtEnd = entitlements.subscription_cancel_at_period_end
   const periodEnd = entitlements.subscription_current_period_end
+  const sp = entitlements.subscription_scheduled_plan
+  const scheduledDowngrade: Plan | null =
+    sp && TIER_ORDER.includes(sp as Plan) ? (sp as Plan) : null
 
   const used = entitlements.pro_tokens_used
   const cap = entitlements.pro_included_tokens_per_month
@@ -91,11 +94,32 @@ export default function ManageBillingModal({
     setError(null)
     setConfirmPlan(null)
     try {
-      await api.changePlan(plan)
-      setSuccessMsg(`Switched to ${TIER_META[plan].label}. Your plan has been updated.`)
+      const res = await api.changePlan(plan)
+      if (res.scheduled) {
+        const when = res.effective_at ? fmtDate(res.effective_at) : fmtDate(periodEnd)
+        setSuccessMsg(
+          `Downgrade scheduled: you stay on ${TIER_META[currentPlan as Plan].label} until ${when}, then move to ${TIER_META[plan].label}. No refund or credit for unused time.`,
+        )
+      } else {
+        setSuccessMsg(`Switched to ${TIER_META[plan].label}. Your plan has been updated.`)
+      }
       onUpdated()
     } catch {
       setError('Could not change plan. Please try again.')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const doCancelScheduledDowngrade = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      await api.cancelScheduledDowngrade()
+      setSuccessMsg('Scheduled downgrade canceled. Your current plan continues unchanged.')
+      onUpdated()
+    } catch {
+      setError('Could not cancel the scheduled change. Please try again.')
     } finally {
       setBusy(false)
     }
@@ -208,6 +232,24 @@ export default function ManageBillingModal({
             </div>
           )}
 
+          {/* Pending downgrade (next billing period) */}
+          {scheduledDowngrade && !cancelAtEnd && !successMsg && !confirmPlan && !confirmCancel && (
+            <div className="rounded-xl px-4 py-3 text-sm text-amber-200/90 bg-amber-950/30 border border-amber-500/25">
+              <p>
+                Downgrades to <span className="font-semibold">{TIER_META[scheduledDowngrade].label}</span> on{' '}
+                <span className="font-semibold">{fmtDate(periodEnd)}</span>. You keep your current plan and allowance until then.
+              </p>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={doCancelScheduledDowngrade}
+                className="mt-2 text-xs font-semibold text-amber-100/90 hover:text-white underline-offset-2 hover:underline disabled:opacity-40"
+              >
+                {busy ? 'Canceling…' : 'Cancel scheduled downgrade'}
+              </button>
+            </div>
+          )}
+
           {/* Current plan summary */}
           {isPaidPlan && (
             <div
@@ -314,7 +356,9 @@ export default function ManageBillingModal({
               style={{ background: 'rgba(255,255,255,0.02)', boxShadow: '0 0 0 1px rgba(255,255,255,0.08)' }}
             >
               <p className="text-sm text-brand-cloud/80 mb-4">
-                Switch to <span className="font-semibold text-brand-cloud">{TIER_META[confirmPlan].label}</span>? Your monthly allowance will change to <span className="font-semibold text-brand-cloud">{TIER_META[confirmPlan].tokens} units</span>. Stripe will credit any unused time from your current plan.
+                Switch to <span className="font-semibold text-brand-cloud">{TIER_META[confirmPlan].label}</span> at the{' '}
+                <span className="font-semibold text-brand-cloud">end of your billing period</span> ({fmtDate(periodEnd)})? Until then you stay on{' '}
+                {TIER_META[currentPlan as Plan].label} with the same allowance. There is no refund or credit for unused time on the higher plan.
               </p>
               <div className="flex gap-2">
                 <button

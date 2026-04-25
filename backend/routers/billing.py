@@ -82,6 +82,34 @@ for _plan, _price in _PLAN_TO_PRICE.items():
     if _price:
         _PRICE_TO_PLAN[_price] = _plan
 
+_PAID_TIER_RANK: dict[str, int] = {"pro": 1, "max": 2, "ultra": 3}
+
+
+def _stripe_subscription_to_dict(sub: object) -> dict:
+    if hasattr(sub, "to_dict"):
+        raw = sub.to_dict()
+        return raw if isinstance(raw, dict) else {}
+    return sub if isinstance(sub, dict) else {}
+
+
+def _clear_scheduled_downgrade(acc: Account) -> None:
+    acc.subscription_scheduled_plan = None
+    acc.subscription_schedule_id = None
+
+
+def _try_release_subscription_schedule(
+    sc: stripe.StripeClient, schedule_id: str | None, *, strict: bool = False
+) -> None:
+    """Detach a subscription schedule; subscription keeps current price until period end."""
+    if not schedule_id:
+        return
+    try:
+        sc.v1.subscription_schedules.release(schedule_id)
+    except stripe.StripeError as e:
+        logger.warning("Could not release subscription schedule %s: %s", schedule_id, e)
+        if strict:
+            raise
+
 
 def _stripe_client() -> stripe.StripeClient:
     if not STRIPE_SECRET_KEY:
@@ -190,7 +218,7 @@ def change_plan(
     account_id: CurrentAccount,
     db: Session = Depends(get_db),
 ):
-    """Swap the subscription to a different price (upgrade or downgrade)."""
+    """Upgrade immediately (prorated charge) or queue a downgrade for the next billing period (no credit)."""
     price_id = _PLAN_TO_PRICE.get(body.plan)
     if not price_id:
         raise HTTPException(
@@ -207,23 +235,156 @@ def change_plan(
     if not sub_id:
         raise HTTPException(status_code=400, detail="No active subscription found.")
 
+    if bool(getattr(acc, "subscription_cancel_at_period_end", False)):
+        raise HTTPException(
+            status_code=400,
+            detail="Subscription is set to cancel at period end. Reactivate it first to change plans.",
+        )
+
     try:
         sub = sc.v1.subscriptions.retrieve(sub_id)
-        items_data = sub.to_dict().get("items", {}).get("data", []) if hasattr(sub, "to_dict") else []
+        sub_d = _stripe_subscription_to_dict(sub)
+        items_data = sub_d.get("items", {}).get("data", []) if isinstance(sub_d.get("items"), dict) else []
         if not items_data:
             raise HTTPException(status_code=400, detail="Could not retrieve subscription items.")
         item_id = items_data[0]["id"]
-        sc.v1.subscriptions.update(
-            sub_id,
-            params={
-                "items": [{"id": item_id, "price": price_id}],
-                "proration_behavior": "create_prorations",
-            },
-        )
+
+        cur_price_id = _first_subscription_price_id(sub_d)
+        current_plan = (
+            (_PRICE_TO_PLAN.get(cur_price_id) if cur_price_id else None)
+            or (getattr(acc, "subscription_tier", None) or "")
+        ).lower()
+        if current_plan not in _PAID_TIER_RANK:
+            raise HTTPException(status_code=400, detail="Could not determine current subscription plan.")
+
+        cur_rank = _PAID_TIER_RANK[current_plan]
+        tgt_rank = _PAID_TIER_RANK[body.plan]
+
+        if tgt_rank == cur_rank:
+            return {"ok": True, "scheduled": False}
+
+        # Upgrade: apply immediately with proration; drop any pending downgrade schedule first.
+        if tgt_rank > cur_rank:
+            _try_release_subscription_schedule(sc, getattr(acc, "subscription_schedule_id", None))
+            _clear_scheduled_downgrade(acc)
+            sc.v1.subscriptions.update(
+                sub_id,
+                params={
+                    "items": [{"id": item_id, "price": price_id}],
+                    "proration_behavior": "create_prorations",
+                },
+            )
+            db.commit()
+            return {"ok": True, "scheduled": False}
+
+        # Downgrade: subscription schedule, change at period end, no proration credit.
+        if getattr(acc, "subscription_scheduled_plan", None) == body.plan and getattr(
+            acc, "subscription_schedule_id", None
+        ):
+            pe = sub_d.get("current_period_end")
+            if pe is None and items_data:
+                pe = items_data[0].get("current_period_end")
+            effective_at = (
+                datetime.utcfromtimestamp(int(pe)).isoformat() + "Z" if pe is not None else None
+            )
+            return {
+                "ok": True,
+                "scheduled": True,
+                "scheduled_plan": body.plan,
+                "effective_at": effective_at,
+            }
+
+        _try_release_subscription_schedule(sc, getattr(acc, "subscription_schedule_id", None))
+        _clear_scheduled_downgrade(acc)
+
+        sched_created: object | None = None
+        try:
+            sched_created = sc.v1.subscription_schedules.create(params={"from_subscription": sub_id})
+            sched_d = sched_created.to_dict() if hasattr(sched_created, "to_dict") else {}
+            phases = sched_d.get("phases") or []
+            if not phases or not isinstance(phases[0], dict):
+                raise HTTPException(status_code=400, detail="Could not read subscription schedule phase.")
+
+            ph0 = phases[0]
+            p0_item = (ph0.get("items") or [{}])[0]
+            p0_price = p0_item.get("price")
+            if isinstance(p0_price, dict):
+                p0_price = p0_price.get("id")
+            qty = int(p0_item.get("quantity") or 1)
+            phase0: dict = {
+                "items": [{"price": p0_price, "quantity": qty}],
+                "start_date": ph0["start_date"],
+                "end_date": ph0["end_date"],
+                "proration_behavior": "none",
+            }
+            phase1: dict = {
+                "items": [{"price": price_id, "quantity": 1}],
+                "proration_behavior": "none",
+                "duration": {"interval": "month", "interval_count": 1},
+            }
+            sched_id_str = str(sched_d.get("id", ""))
+            updated = sc.v1.subscription_schedules.update(
+                sched_id_str,
+                params={
+                    "phases": [phase0, phase1],
+                    "end_behavior": "release",
+                    "proration_behavior": "none",
+                },
+            )
+            updated_d = updated.to_dict() if hasattr(updated, "to_dict") else {}
+            acc.subscription_scheduled_plan = body.plan
+            acc.subscription_schedule_id = str(updated_d.get("id", sched_id_str))
+            db.commit()
+
+            eff_ts = ph0.get("end_date")
+            effective_at = datetime.utcfromtimestamp(int(eff_ts)).isoformat() + "Z" if eff_ts is not None else None
+            return {
+                "ok": True,
+                "scheduled": True,
+                "scheduled_plan": body.plan,
+                "effective_at": effective_at,
+            }
+        except (stripe.StripeError, HTTPException):
+            if sched_created is not None and hasattr(sched_created, "id"):
+                try:
+                    sc.v1.subscription_schedules.release(str(sched_created.id))
+                except stripe.StripeError:
+                    pass
+            raise
     except stripe.StripeError as e:
         logger.error("Stripe change-plan error: %s", e)
+        db.rollback()
         raise HTTPException(status_code=502, detail=f"Stripe error: {e.user_message or str(e)}")
 
+
+# ---------------------------------------------------------------------------
+# POST /api/billing/cancel-scheduled-downgrade
+# ---------------------------------------------------------------------------
+
+
+@router.post("/cancel-scheduled-downgrade")
+def cancel_scheduled_downgrade(
+    account_id: CurrentAccount,
+    db: Session = Depends(get_db),
+):
+    """Undo a pending end-of-period downgrade (releases the Stripe subscription schedule)."""
+    sc = _stripe_client()
+    acc = db.get(Account, account_id)
+    if not acc:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    sched_id: str | None = getattr(acc, "subscription_schedule_id", None)
+    if not sched_id:
+        raise HTTPException(status_code=400, detail="No scheduled plan change to cancel.")
+
+    try:
+        _try_release_subscription_schedule(sc, sched_id, strict=True)
+    except stripe.StripeError as e:
+        logger.error("Stripe cancel-scheduled-downgrade error: %s", e)
+        raise HTTPException(status_code=502, detail=f"Stripe error: {e.user_message or str(e)}") from e
+
+    _clear_scheduled_downgrade(acc)
+    db.commit()
     return {"ok": True}
 
 
@@ -247,10 +408,14 @@ def cancel_subscription(
         raise HTTPException(status_code=400, detail="No active subscription found.")
 
     try:
+        _try_release_subscription_schedule(sc, getattr(acc, "subscription_schedule_id", None))
+        _clear_scheduled_downgrade(acc)
         sc.v1.subscriptions.update(sub_id, params={"cancel_at_period_end": True})
     except stripe.StripeError as e:
         logger.error("Stripe cancel error: %s", e)
         raise HTTPException(status_code=502, detail=f"Stripe error: {e.user_message or str(e)}")
+
+    db.commit()
 
     period_end = getattr(acc, "subscription_current_period_end", None)
     access_until = (period_end.isoformat() + "Z") if period_end else None
@@ -407,6 +572,7 @@ def _handle_checkout_completed(session: dict, db: Session) -> None:
     acc.stripe_subscription_id = subscription_id
     acc.subscription_tier = plan
     acc.subscription_status = "active"
+    _clear_scheduled_downgrade(acc)
     period_end = _fetch_subscription_current_period_end(subscription_id)
     if period_end:
         acc.subscription_current_period_end = period_end
@@ -454,6 +620,9 @@ def _handle_subscription_updated(sub: dict, db: Session) -> None:
     if period_end:
         acc.subscription_current_period_end = period_end
     acc.subscription_cancel_at_period_end = bool(sub.get("cancel_at_period_end", False))
+    scheduled = getattr(acc, "subscription_scheduled_plan", None)
+    if scheduled and new_tier == scheduled:
+        _clear_scheduled_downgrade(acc)
     db.commit()
     logger.info("Subscription updated for customer %s: tier=%s status=%s cancel_at_period_end=%s", customer_id, new_tier, new_status, acc.subscription_cancel_at_period_end)
 
@@ -471,6 +640,7 @@ def _handle_subscription_deleted(sub: dict, db: Session) -> None:
     acc.subscription_status = "canceled"
     acc.stripe_subscription_id = None
     acc.subscription_cancel_at_period_end = False
+    _clear_scheduled_downgrade(acc)
     db.commit()
     logger.info("Subscription canceled for customer %s — downgraded to free", customer_id)
 

@@ -143,6 +143,7 @@ def entitlements_payload(account: "Account") -> dict:
             else None
         ),
         "subscription_cancel_at_period_end": bool(getattr(account, "subscription_cancel_at_period_end", False) or False),
+        "subscription_scheduled_plan": getattr(account, "subscription_scheduled_plan", None),
     }
 
 

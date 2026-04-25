@@ -35,5 +35,7 @@ class Account(Base):
     subscription_status = Column(String, nullable=True)  # "active" | "past_due" | "canceled" | null
     subscription_current_period_end = Column(DateTime, nullable=True)
     subscription_cancel_at_period_end = Column(Boolean, nullable=True, default=False)
+    subscription_scheduled_plan = Column(String, nullable=True)   # plan queued for next period (e.g. "pro")
+    subscription_schedule_id = Column(String, nullable=True)      # Stripe SubscriptionSchedule ID
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

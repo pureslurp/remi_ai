@@ -202,11 +202,21 @@ export const createCheckoutSession = (plan: 'pro' | 'max' | 'ultra') =>
 export const createPortalSession = () =>
   req<{ url: string }>('/billing/portal', { method: 'POST' })
 
+export type ChangePlanResult = {
+  ok: boolean
+  scheduled?: boolean
+  scheduled_plan?: 'pro' | 'max' | 'ultra'
+  effective_at?: string | null
+}
+
 export const changePlan = (plan: 'pro' | 'max' | 'ultra') =>
-  req<{ ok: boolean }>('/billing/change-plan', {
+  req<ChangePlanResult>('/billing/change-plan', {
     method: 'POST',
     body: JSON.stringify({ plan }),
   })
+
+export const cancelScheduledDowngrade = () =>
+  req<{ ok: boolean }>('/billing/cancel-scheduled-downgrade', { method: 'POST' })
 
 export const cancelSubscription = () =>
   req<{ ok: boolean; access_until: string | null }>('/billing/cancel', { method: 'POST' })
