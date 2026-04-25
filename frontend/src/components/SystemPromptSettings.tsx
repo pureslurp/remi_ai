@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { createPortal } from 'react-dom'
 import * as api from '../api/client'
 import type { SystemPromptsSettings } from '../api/client'
 
@@ -51,6 +52,15 @@ export default function SystemPromptSettings({ open, onClose }: Props) {
     }
   }, [open])
 
+  useEffect(() => {
+    if (!open) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !saving) onClose()
+    }
+    document.addEventListener('keydown', onKey)
+    return () => document.removeEventListener('keydown', onKey)
+  }, [open, onClose, saving])
+
   const resetCurrentTab = () => {
     if (!data) return
     if (tab === 'buyer') setBuyer(data.default_buyer)
@@ -90,9 +100,9 @@ export default function SystemPromptSettings({ open, onClose }: Props) {
 
   if (!open) return null
 
-  return (
+  const modal = (
     <div
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-[100] p-4 overflow-y-auto"
+      className="modal-backdrop-in fixed inset-0 z-50 flex items-end justify-center sm:items-center bg-black/70 backdrop-blur-md px-4 pb-4 sm:pb-0 overflow-y-auto"
       onClick={(e) => {
         if (e.target === e.currentTarget && !saving) onClose()
       }}
@@ -187,4 +197,8 @@ export default function SystemPromptSettings({ open, onClose }: Props) {
       </div>
     </div>
   )
+
+  return typeof document !== 'undefined' && document.body
+    ? createPortal(modal, document.body)
+    : modal
 }

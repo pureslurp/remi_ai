@@ -40,6 +40,7 @@ export default function ManageBillingModal({
   const overlayRef = useRef<HTMLDivElement>(null)
   const [confirmCancel, setConfirmCancel] = useState(false)
   const [confirmPlan, setConfirmPlan] = useState<Plan | null>(null)
+  const [confirmUpgradePlan, setConfirmUpgradePlan] = useState<Plan | null>(null)
   const [busy, setBusy] = useState(false)
   const [portalBusy, setPortalBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -49,6 +50,7 @@ export default function ManageBillingModal({
     if (!open) return
     setConfirmCancel(false)
     setConfirmPlan(null)
+    setConfirmUpgradePlan(null)
     setBusy(false)
     setError(null)
     setSuccessMsg(null)
@@ -81,11 +83,11 @@ export default function ManageBillingModal({
     setSuccessMsg(null)
     const targetRank = TIER_RANK[plan]
     if (targetRank < currentRank) {
-      // Downgrade — show confirmation first
+      setConfirmUpgradePlan(null)
       setConfirmPlan(plan)
-    } else {
-      // Upgrade — proceed immediately
-      doChangePlan(plan)
+    } else if (targetRank > currentRank) {
+      setConfirmPlan(null)
+      setConfirmUpgradePlan(plan)
     }
   }
 
@@ -93,12 +95,13 @@ export default function ManageBillingModal({
     setBusy(true)
     setError(null)
     setConfirmPlan(null)
+    setConfirmUpgradePlan(null)
     try {
       const res = await api.changePlan(plan)
       if (res.scheduled) {
         const when = res.effective_at ? fmtDate(res.effective_at) : fmtDate(periodEnd)
         setSuccessMsg(
-          `Downgrade scheduled: you stay on ${TIER_META[currentPlan as Plan].label} until ${when}, then move to ${TIER_META[plan].label}. No refund or credit for unused time.`,
+          `Downgrade scheduled: you stay on ${TIER_META[currentPlan as Plan].label} until ${when}, then move to ${TIER_META[plan].label}.`,
         )
       } else {
         setSuccessMsg(`Switched to ${TIER_META[plan].label}. Your plan has been updated.`)
@@ -233,7 +236,7 @@ export default function ManageBillingModal({
           )}
 
           {/* Pending downgrade (next billing period) */}
-          {scheduledDowngrade && !cancelAtEnd && !successMsg && !confirmPlan && !confirmCancel && (
+          {scheduledDowngrade && !cancelAtEnd && !successMsg && !confirmPlan && !confirmUpgradePlan && !confirmCancel && (
             <div className="rounded-xl px-4 py-3 text-sm text-amber-200/90 bg-amber-950/30 border border-amber-500/25">
               <p>
                 Downgrades to <span className="font-semibold">{TIER_META[scheduledDowngrade].label}</span> on{' '}
@@ -301,7 +304,7 @@ export default function ManageBillingModal({
           )}
 
           {/* Change plan section */}
-          {isPaidPlan && otherPlans.length > 0 && !confirmCancel && !confirmPlan && (
+          {isPaidPlan && otherPlans.length > 0 && !confirmCancel && !confirmPlan && !confirmUpgradePlan && (
             <div>
               <p className="text-[10px] font-semibold tracking-[0.15em] uppercase text-brand-cloud/40 mb-3">Change plan</p>
               <div className="grid grid-cols-2 gap-2.5">
@@ -349,6 +352,44 @@ export default function ManageBillingModal({
             </div>
           )}
 
+          {/* Upgrade confirmation */}
+          {confirmUpgradePlan && (
+            <div
+              className="rounded-2xl p-5"
+              style={{
+                background: 'rgba(96,165,250,0.06)',
+                boxShadow: '0 0 0 1px rgba(96,165,250,0.2)',
+              }}
+            >
+              <p className="text-sm text-brand-cloud/80 mb-4">
+                Upgrade to <span className="font-semibold text-brand-cloud">{TIER_META[confirmUpgradePlan].label}</span>{' '}
+                (${TIER_META[confirmUpgradePlan].price}/mo)? Your plan updates right away; your card on file is charged, including any prorated amount for the rest of this billing period.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => doChangePlan(confirmUpgradePlan)}
+                  className="flex-1 rounded-xl py-2.5 text-sm font-semibold transition-all disabled:opacity-40"
+                  style={{
+                    background: 'linear-gradient(135deg, #60a5fa 0%, #93c5fd 100%)',
+                    color: '#18181b',
+                    boxShadow: '0 2px 12px rgba(96,165,250,0.2)',
+                  }}
+                >
+                  {busy ? 'Upgrading…' : `Upgrade to ${TIER_META[confirmUpgradePlan].label}`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmUpgradePlan(null)}
+                  className="px-4 rounded-xl py-2.5 text-sm text-brand-cloud/50 hover:text-brand-cloud/70 transition-all"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Downgrade confirmation */}
           {confirmPlan && (
             <div
@@ -356,9 +397,9 @@ export default function ManageBillingModal({
               style={{ background: 'rgba(255,255,255,0.02)', boxShadow: '0 0 0 1px rgba(255,255,255,0.08)' }}
             >
               <p className="text-sm text-brand-cloud/80 mb-4">
-                Switch to <span className="font-semibold text-brand-cloud">{TIER_META[confirmPlan].label}</span> at the{' '}
-                <span className="font-semibold text-brand-cloud">end of your billing period</span> ({fmtDate(periodEnd)})? Until then you stay on{' '}
-                {TIER_META[currentPlan as Plan].label} with the same allowance. There is no refund or credit for unused time on the higher plan.
+                Switch to <span className="font-semibold text-brand-cloud">{TIER_META[confirmPlan].label}</span>? You can keep using{' '}
+                <span className="font-semibold text-brand-cloud">{TIER_META[currentPlan as Plan].label}</span> until the end of your billing period
+                {periodEnd ? ` (${fmtDate(periodEnd)})` : ''}.
               </p>
               <div className="flex gap-2">
                 <button
@@ -413,7 +454,7 @@ export default function ManageBillingModal({
           )}
 
           {/* Reactivate button */}
-          {cancelAtEnd && !confirmCancel && !successMsg && (
+          {cancelAtEnd && !confirmCancel && !confirmPlan && !confirmUpgradePlan && !successMsg && (
             <button
               type="button"
               disabled={busy}
@@ -440,10 +481,10 @@ export default function ManageBillingModal({
               {portalBusy ? 'Opening…' : 'Update payment method →'}
             </button>
 
-            {isPaidPlan && !cancelAtEnd && !confirmCancel && !successMsg && (
+            {isPaidPlan && !cancelAtEnd && !confirmCancel && !confirmPlan && !confirmUpgradePlan && !successMsg && (
               <button
                 type="button"
-                onClick={() => { setConfirmPlan(null); setConfirmCancel(true) }}
+                onClick={() => { setConfirmPlan(null); setConfirmUpgradePlan(null); setConfirmCancel(true) }}
                 className="text-xs text-red-400/50 hover:text-red-400/80 transition-colors"
               >
                 Cancel subscription

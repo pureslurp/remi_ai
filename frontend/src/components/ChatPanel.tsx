@@ -4,6 +4,7 @@ import { useChat } from '../hooks/useChat'
 import * as api from '../api/client'
 import ChatMessageBubble from './ChatMessage'
 import UpgradePlanModal from './UpgradePlanModal'
+import ManageBillingModal from './ManageBillingModal'
 import type { AccountEntitlements, ChatMessage, Document, LlmOptionsResponse, Project } from '../types'
 
 interface Props {
@@ -11,20 +12,39 @@ interface Props {
   onProjectUpdated: (p: Project) => void
 }
 
-function usageCaption(e: AccountEntitlements): { line: string } {
-  if (e.is_admin) {
-    return { line: 'Unlimited usage (admin)' }
-  }
+/** Fraction of included allowance used (0–1), or null for admins / invalid caps. */
+function usageFractionUsed(e: AccountEntitlements): number | null {
+  if (e.is_admin) return null
   if (e.subscription_tier === 'pro' || e.subscription_tier === 'max' || e.subscription_tier === 'ultra') {
     const cap = e.pro_included_tokens_per_month
-    return {
-      line: `${e.pro_tokens_remaining.toLocaleString()} / ${cap.toLocaleString()} billable units left this month`,
-    }
+    if (cap <= 0) return null
+    return e.pro_tokens_used / cap
   }
   const cap = e.trial_max_tokens
-  return {
-    line: `${e.trial_tokens_remaining.toLocaleString()} / ${cap.toLocaleString()} trial units left`,
+  if (cap <= 0) return null
+  return e.trial_tokens_used / cap
+}
+
+type UsageFooter = { line: string; tone: 'admin' | 'warn' | 'limit' }
+
+function usageFooterCaption(e: AccountEntitlements): UsageFooter | null {
+  if (e.is_admin) return { line: 'Unlimited usage (admin)', tone: 'admin' }
+  const frac = usageFractionUsed(e)
+  if (frac == null) return null
+  const pct = Math.min(100, Math.round(frac * 100))
+  if (frac >= 1) {
+    return {
+      line: "You've used 100% of your included allowance this period — you've hit your limit.",
+      tone: 'limit',
+    }
   }
+  if (frac >= 0.9) {
+    return {
+      line: `You've used ${pct}% of your included allowance this period.`,
+      tone: 'warn',
+    }
+  }
+  return null
 }
 
 export default function ChatPanel({ project, onProjectUpdated }: Props) {
@@ -48,6 +68,7 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
   const [mentionOpen, setMentionOpen] = useState(false)
   const [mentionQuery, setMentionQuery] = useState('')
   const [upgradeOpen, setUpgradeOpen] = useState(false)
+  const [billingOpen, setBillingOpen] = useState(false)
 
   const mentionFiltered = useMemo(() => {
     const q = mentionQuery.trim().toLowerCase()
@@ -81,8 +102,10 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
     refreshEntitlements()
   }, [projectId, refreshEntitlements])
 
-  const usageCaptionText = entitlements ? usageCaption(entitlements) : null
+  const usageFooter = entitlements ? usageFooterCaption(entitlements) : null
   const canSendChat = entitlements == null || entitlements.can_send_chat
+  const hasStripeSubscription =
+    entitlements != null && (entitlements.subscription_status ?? null) != null
   const activeProviderId = (() => {
     if (!llmOpts?.providers?.length) {
       return project.llm_provider || llmOpts?.default_provider || ''
@@ -221,20 +244,46 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
         </div>
         {entitlements && !entitlements.can_send_chat && (
           <p className="mt-2 text-[11px] text-amber-200/90 leading-relaxed">
-            You’ve reached your token allowance for now. Upgrade to Pro or add usage to keep chatting.
-            {entitlements.upgrade_url ? (
+            {hasStripeSubscription ? (
               <>
-                {' '}
-                <a
-                  href={entitlements.upgrade_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-brand-mint underline-offset-2 hover:underline"
+                You&apos;ve reached your included usage for this billing period. Open{' '}
+                <button
+                  type="button"
+                  onClick={() => setBillingOpen(true)}
+                  className="text-brand-mint underline-offset-2 hover:underline font-medium"
                 >
-                  Open billing
-                </a>
+                  manage billing
+                </button>
+                {' '}
+                to move to a higher plan, or try again after your allowance resets.
               </>
-            ) : null}
+            ) : (
+              <>
+                You&apos;ve reached your token allowance for now.{' '}
+                <button
+                  type="button"
+                  onClick={() => setUpgradeOpen(true)}
+                  className="text-brand-mint underline-offset-2 hover:underline font-medium"
+                >
+                  Upgrade plan
+                </button>
+                {' '}
+                to keep chatting.
+                {entitlements.upgrade_url ? (
+                  <>
+                    {' '}
+                    <a
+                      href={entitlements.upgrade_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-brand-mint/80 underline-offset-2 hover:underline"
+                    >
+                      More options
+                    </a>
+                  </>
+                ) : null}
+              </>
+            )}
           </p>
         )}
       </div>
@@ -413,16 +462,26 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
               <p className="text-[10px] text-brand-cloud/25">No assistant models configured on the server.</p>
             )}
 
-            {usageCaptionText && (
-              <p className="flex flex-wrap items-baseline justify-end gap-x-2 gap-y-0.5 text-[10px] leading-relaxed text-brand-cloud/28 sm:text-right sm:min-w-0 sm:max-w-[55%]">
-                <span className="min-w-0">{usageCaptionText.line}</span>
-                {entitlements?.upgrade_url ? (
+            {usageFooter && (
+              <p
+                className={`flex flex-wrap items-baseline justify-end gap-x-2 gap-y-0.5 text-[10px] leading-relaxed sm:text-right sm:min-w-0 sm:max-w-[55%] ${
+                  usageFooter.tone === 'admin'
+                    ? 'text-brand-cloud/28'
+                    : usageFooter.tone === 'limit'
+                      ? 'text-amber-200/90'
+                      : 'text-amber-200/85'
+                }`}
+              >
+                <span className="min-w-0">{usageFooter.line}</span>
+                {!canSendChat || entitlements?.upgrade_url ? (
                   <button
                     type="button"
-                    onClick={() => setUpgradeOpen(true)}
+                    onClick={() =>
+                      hasStripeSubscription ? setBillingOpen(true) : setUpgradeOpen(true)
+                    }
                     className="shrink-0 text-brand-cloud/45 hover:text-brand-cloud/65 transition-colors underline-offset-[3px] hover:underline"
                   >
-                    Upgrade
+                    {hasStripeSubscription ? 'Manage billing' : 'Upgrade'}
                   </button>
                 ) : null}
               </p>
@@ -432,6 +491,14 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
       </div>
     </div>
     <UpgradePlanModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
+    {entitlements && (
+      <ManageBillingModal
+        open={billingOpen}
+        onClose={() => setBillingOpen(false)}
+        entitlements={entitlements}
+        onUpdated={refreshEntitlements}
+      />
+    )}
     </>
   )
 }

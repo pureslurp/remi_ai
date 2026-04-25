@@ -4,6 +4,7 @@ import { useAppStore } from '../store/appStore'
 import type { ChatMessage } from '../types'
 
 type QuotaDetail = {
+  code?: string
   message?: string
   instruction?: string
   upgrade_url?: string | null
@@ -12,11 +13,21 @@ type QuotaDetail = {
 function quotaAssistantMarkdown(detail: QuotaDetail): string {
   const title = '### Plan limit reached\n\n'
   const body = [detail.message, detail.instruction].filter(Boolean).join('\n\n')
-  const link =
+  const paidQuota =
+    detail.code === 'quota_exceeded' ||
+    detail.code === 'subscription_inactive'
+  if (paidQuota) {
+    return (
+      title +
+      body +
+      '\n\nUse **Manage billing** below the message box to change your plan or payment method.'
+    )
+  }
+  const extra =
     detail.upgrade_url != null && detail.upgrade_url !== ''
-      ? `\n\n[Upgrade or manage billing](${detail.upgrade_url})`
+      ? `\n\n[More options](${detail.upgrade_url})`
       : ''
-  return title + body + link
+  return title + body + '\n\nUse **Upgrade** below the message box to choose a plan.' + extra
 }
 
 export type ChatSendOptions = {
