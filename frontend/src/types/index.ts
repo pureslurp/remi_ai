@@ -65,6 +65,7 @@ export type AccountEntitlements = {
   quota_output_multiplier?: number
   subscription_status: 'active' | 'past_due' | 'canceled' | 'trialing' | null
   subscription_current_period_end: string | null
+  subscription_cancel_at_period_end: boolean
 }
 
 export interface Property {

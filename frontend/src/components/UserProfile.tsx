@@ -1,8 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAppStore } from '../store/appStore'
 import * as api from '../api/client'
+import type { AccountEntitlements } from '../types'
 import SystemPromptSettings from './SystemPromptSettings'
 import UpgradePlanModal from './UpgradePlanModal'
+import ManageBillingModal from './ManageBillingModal'
 
 const PLAN_LABELS: Record<string, string> = {
   free: 'Free plan',
@@ -17,19 +19,19 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
   const [open, setOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [upgradeOpen, setUpgradeOpen] = useState(false)
-  const [billingBusy, setBillingBusy] = useState(false)
-  const [subscriptionTier, setSubscriptionTier] = useState<string | null>(null)
-  const [hasStripeSubscription, setHasStripeSubscription] = useState(false)
+  const [billingOpen, setBillingOpen] = useState(false)
+  const [entitlements, setEntitlements] = useState<AccountEntitlements | null>(null)
   const ref = useRef<HTMLDivElement>(null)
+
+  const loadEntitlements = () => {
+    api.getAccountEntitlements()
+      .then(e => setEntitlements(e))
+      .catch(() => {})
+  }
 
   // Fetch entitlements once on mount so we know the current tier
   useEffect(() => {
-    api.getAccountEntitlements()
-      .then(e => {
-        setSubscriptionTier(e.subscription_tier)
-        setHasStripeSubscription(e.subscription_status != null)
-      })
-      .catch(() => {})
+    loadEntitlements()
   }, [])
 
   useEffect(() => {
@@ -67,17 +69,8 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
     }
   }
 
-  const manageBilling = async () => {
-    setBillingBusy(true)
-    try {
-      const { url } = await api.createPortalSession()
-      window.location.href = url
-    } catch {
-      // portal unavailable — fall back silently
-    } finally {
-      setBillingBusy(false)
-    }
-  }
+  const subscriptionTier = entitlements?.subscription_tier ?? null
+  const hasStripeSubscription = (entitlements?.subscription_status ?? null) != null
 
   const avatar = googleUser?.picture ? (
     <img
@@ -154,11 +147,10 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
           {hasStripeSubscription ? (
             <button
               type="button"
-              onClick={() => { setOpen(false); manageBilling() }}
-              disabled={billingBusy}
-              className="w-full text-left px-3 py-2 text-sm text-brand-cloud/90 hover:bg-white/[0.06] transition disabled:opacity-50"
+              onClick={() => { setOpen(false); setBillingOpen(true) }}
+              className="w-full text-left px-3 py-2 text-sm text-brand-cloud/90 hover:bg-white/[0.06] transition"
             >
-              {billingBusy ? 'Opening billing…' : 'Manage billing…'}
+              Manage billing…
             </button>
           ) : subscriptionTier === 'free' || subscriptionTier === 'trial' ? (
             <button
@@ -192,6 +184,14 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
       )}
       <SystemPromptSettings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
       <UpgradePlanModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
+      {entitlements && (
+        <ManageBillingModal
+          open={billingOpen}
+          onClose={() => setBillingOpen(false)}
+          entitlements={entitlements}
+          onUpdated={loadEntitlements}
+        />
+      )}
     </div>
   )
 }

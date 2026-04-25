@@ -201,3 +201,15 @@ export const createCheckoutSession = (plan: 'pro' | 'max' | 'ultra') =>
 
 export const createPortalSession = () =>
   req<{ url: string }>('/billing/portal', { method: 'POST' })
+
+export const changePlan = (plan: 'pro' | 'max' | 'ultra') =>
+  req<{ ok: boolean }>('/billing/change-plan', {
+    method: 'POST',
+    body: JSON.stringify({ plan }),
+  })
+
+export const cancelSubscription = () =>
+  req<{ ok: boolean; access_until: string | null }>('/billing/cancel', { method: 'POST' })
+
+export const reactivateSubscription = () =>
+  req<{ ok: boolean }>('/billing/reactivate', { method: 'POST' })

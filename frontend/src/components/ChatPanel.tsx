@@ -15,7 +15,7 @@ function usageCaption(e: AccountEntitlements): { line: string } {
   if (e.is_admin) {
     return { line: 'Unlimited usage (admin)' }
   }
-  if (e.subscription_tier === 'pro') {
+  if (e.subscription_tier === 'pro' || e.subscription_tier === 'max' || e.subscription_tier === 'ultra') {
     const cap = e.pro_included_tokens_per_month
     return {
       line: `${e.pro_tokens_remaining.toLocaleString()} / ${cap.toLocaleString()} billable units left this month`,

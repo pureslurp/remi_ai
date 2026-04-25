@@ -177,6 +177,115 @@ def create_portal_session(
 
 
 # ---------------------------------------------------------------------------
+# POST /api/billing/change-plan
+# ---------------------------------------------------------------------------
+
+class ChangePlanRequest(BaseModel):
+    plan: Literal["pro", "max", "ultra"]
+
+
+@router.post("/change-plan")
+def change_plan(
+    body: ChangePlanRequest,
+    account_id: CurrentAccount,
+    db: Session = Depends(get_db),
+):
+    """Swap the subscription to a different price (upgrade or downgrade)."""
+    price_id = _PLAN_TO_PRICE.get(body.plan)
+    if not price_id:
+        raise HTTPException(
+            status_code=503,
+            detail=f"Stripe price for plan '{body.plan}' is not configured.",
+        )
+
+    sc = _stripe_client()
+    acc = db.get(Account, account_id)
+    if not acc:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    sub_id: str | None = getattr(acc, "stripe_subscription_id", None)
+    if not sub_id:
+        raise HTTPException(status_code=400, detail="No active subscription found.")
+
+    try:
+        sub = sc.v1.subscriptions.retrieve(sub_id)
+        items_data = sub.to_dict().get("items", {}).get("data", []) if hasattr(sub, "to_dict") else []
+        if not items_data:
+            raise HTTPException(status_code=400, detail="Could not retrieve subscription items.")
+        item_id = items_data[0]["id"]
+        sc.v1.subscriptions.update(
+            sub_id,
+            params={
+                "items": [{"id": item_id, "price": price_id}],
+                "proration_behavior": "create_prorations",
+            },
+        )
+    except stripe.StripeError as e:
+        logger.error("Stripe change-plan error: %s", e)
+        raise HTTPException(status_code=502, detail=f"Stripe error: {e.user_message or str(e)}")
+
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/billing/cancel
+# ---------------------------------------------------------------------------
+
+@router.post("/cancel")
+def cancel_subscription(
+    account_id: CurrentAccount,
+    db: Session = Depends(get_db),
+):
+    """Cancel subscription at end of current billing period (no immediate loss of access)."""
+    sc = _stripe_client()
+    acc = db.get(Account, account_id)
+    if not acc:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    sub_id: str | None = getattr(acc, "stripe_subscription_id", None)
+    if not sub_id:
+        raise HTTPException(status_code=400, detail="No active subscription found.")
+
+    try:
+        sc.v1.subscriptions.update(sub_id, params={"cancel_at_period_end": True})
+    except stripe.StripeError as e:
+        logger.error("Stripe cancel error: %s", e)
+        raise HTTPException(status_code=502, detail=f"Stripe error: {e.user_message or str(e)}")
+
+    period_end = getattr(acc, "subscription_current_period_end", None)
+    access_until = (period_end.isoformat() + "Z") if period_end else None
+    return {"ok": True, "access_until": access_until}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/billing/reactivate
+# ---------------------------------------------------------------------------
+
+@router.post("/reactivate")
+def reactivate_subscription(
+    account_id: CurrentAccount,
+    db: Session = Depends(get_db),
+):
+    """Undo a pending cancellation (cancel_at_period_end → False)."""
+    sc = _stripe_client()
+    acc = db.get(Account, account_id)
+    if not acc:
+        raise HTTPException(status_code=404, detail="Account not found")
+
+    sub_id: str | None = getattr(acc, "stripe_subscription_id", None)
+    if not sub_id:
+        raise HTTPException(status_code=400, detail="No active subscription found.")
+
+    try:
+        sc.v1.subscriptions.update(sub_id, params={"cancel_at_period_end": False})
+    except stripe.StripeError as e:
+        logger.error("Stripe reactivate error: %s", e)
+        raise HTTPException(status_code=502, detail=f"Stripe error: {e.user_message or str(e)}")
+
+    return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
 # POST /api/billing/webhook  (no auth — validated by Stripe signature)
 # ---------------------------------------------------------------------------
 
@@ -344,8 +453,9 @@ def _handle_subscription_updated(sub: dict, db: Session) -> None:
     acc.stripe_subscription_id = sub.get("id", acc.stripe_subscription_id)
     if period_end:
         acc.subscription_current_period_end = period_end
+    acc.subscription_cancel_at_period_end = bool(sub.get("cancel_at_period_end", False))
     db.commit()
-    logger.info("Subscription updated for customer %s: tier=%s status=%s", customer_id, new_tier, new_status)
+    logger.info("Subscription updated for customer %s: tier=%s status=%s cancel_at_period_end=%s", customer_id, new_tier, new_status, acc.subscription_cancel_at_period_end)
 
 
 def _handle_subscription_deleted(sub: dict, db: Session) -> None:
@@ -360,6 +470,7 @@ def _handle_subscription_deleted(sub: dict, db: Session) -> None:
     acc.subscription_tier = "free"
     acc.subscription_status = "canceled"
     acc.stripe_subscription_id = None
+    acc.subscription_cancel_at_period_end = False
     db.commit()
     logger.info("Subscription canceled for customer %s — downgraded to free", customer_id)
 

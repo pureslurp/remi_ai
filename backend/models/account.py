@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 
 from database import Base
 
@@ -34,5 +34,6 @@ class Account(Base):
     stripe_subscription_id = Column(String, nullable=True)
     subscription_status = Column(String, nullable=True)  # "active" | "past_due" | "canceled" | null
     subscription_current_period_end = Column(DateTime, nullable=True)
+    subscription_cancel_at_period_end = Column(Boolean, nullable=True, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
