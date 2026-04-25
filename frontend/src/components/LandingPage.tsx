@@ -396,23 +396,32 @@ export default function LandingPage({ needsDeviceLink, onEmailAuth }: Props) {
       />
 
       <header className="sticky top-0 z-[110] border-b border-white/[0.06] bg-[rgb(24_24_27_/0.82)] backdrop-blur-lg backdrop-saturate-150">
-        <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-4 sm:px-8">
-          <div className="landing-rise flex items-center gap-3" style={{ animationDelay: '0ms' }}>
+        <div className="mx-auto flex min-h-[3.25rem] max-w-6xl items-center justify-between gap-2 px-3 py-2.5 sm:min-h-0 sm:gap-4 sm:px-8 sm:py-4">
+          <div
+            className="landing-rise flex min-w-0 items-center gap-2 sm:gap-3"
+            style={{ animationDelay: '0ms' }}
+          >
             <RecoMark variant="landing" />
-            <span className="font-wordmark text-2xl font-semibold tracking-[0.07em] text-brand-cloud">reco-pilot</span>
+            <span className="font-wordmark whitespace-nowrap text-lg font-semibold tracking-[0.06em] text-brand-cloud sm:text-xl sm:tracking-[0.07em] md:text-2xl">
+              reco-pilot
+            </span>
           </div>
-          <nav className="landing-rise flex items-center gap-2 sm:gap-3" style={{ animationDelay: '60ms' }} aria-label="Account">
+          <nav
+            className="landing-rise flex shrink-0 items-center gap-1.5 sm:gap-3"
+            style={{ animationDelay: '60ms' }}
+            aria-label="Account"
+          >
             <button
               type="button"
               onClick={openSignin}
-              className="rounded-lg border border-white/15 px-3 py-2 text-sm font-medium text-brand-cloud/90 transition hover:bg-white/[0.06]"
+              className="whitespace-nowrap rounded-lg border border-white/15 px-2.5 py-1.5 text-xs font-medium text-brand-cloud/90 transition hover:bg-white/[0.06] sm:px-3 sm:py-2 sm:text-sm"
             >
               Sign in
             </button>
             <button
               type="button"
               onClick={() => openSignup()}
-              className="rounded-lg bg-brand-cloud px-3 py-2 text-sm font-semibold text-brand-navy shadow-md shadow-black/20 transition hover:bg-white"
+              className="whitespace-nowrap rounded-lg bg-brand-cloud px-2.5 py-1.5 text-xs font-semibold text-brand-navy shadow-md shadow-black/20 transition hover:bg-white sm:px-3 sm:py-2 sm:text-sm"
             >
               Sign up
             </button>
