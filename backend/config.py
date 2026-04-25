@@ -189,6 +189,34 @@ STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "").strip() or N
 STRIPE_PRICE_PRO = os.environ.get("STRIPE_PRICE_PRO", "").strip() or None
 STRIPE_PRICE_MAX = os.environ.get("STRIPE_PRICE_MAX", "").strip() or None
 STRIPE_PRICE_ULTRA = os.environ.get("STRIPE_PRICE_ULTRA", "").strip() or None
+# RealEstateAPI (Option B public property data — server key only; see docs/real-estateapi-v1.md)
+REALESTATEAPI_BACKEND = (
+    os.environ.get("REALESTATEAPI_BACKEND", "").strip()
+    or os.environ.get("REAL_ESTATE_API_KEY", "").strip()
+    or None
+)
+# When unset, defaults to "on" iff a server key is present. Set REALESTATEAPI_ENABLED=0 to turn off
+# all vendor property-data calls and product UI, even if the key remains in the environment.
+_reapi_en_raw = os.environ.get("REALESTATEAPI_ENABLED", "").strip().lower()
+if _reapi_en_raw == "":
+    REALESTATEAPI_ENABLED = bool(REALESTATEAPI_BACKEND)
+else:
+    REALESTATEAPI_ENABLED = _reapi_en_raw in ("1", "true", "yes", "on")
+REAPI_ACTIVE = bool(REALESTATEAPI_BACKEND) and REALESTATEAPI_ENABLED
+# Client-side key (if any) is not read by the backend client — reserved for future browser-only flows
+REALESTATEAPI_FRONTEND = (
+    os.environ.get("REALESTATEAPI_FRONTEND", "").strip()
+    or os.environ.get("REAL_ESTATE_API_FRONTEND", "").strip()
+    or None
+)
+REALESTATEAPI_BASE_URL = os.environ.get(
+    "REALESTATEAPI_BASE_URL", "https://api.realestateapi.com"
+).rstrip("/")
+# TTL seconds for in-memory address cache (reduces repeat PropertyDetail calls in chat)
+REALESTATEAPI_CACHE_TTL_SECONDS = int(
+    os.environ.get("REALESTATEAPI_CACHE_TTL_SECONDS", "300") or "300"
+)
+
 MAX_UPLOAD_SIZE_MB = 20
 MAX_UPLOAD_BYTES = MAX_UPLOAD_SIZE_MB * 1024 * 1024
 

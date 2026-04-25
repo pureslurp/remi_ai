@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react'
+import { useState, useRef, useEffect, useLayoutEffect, useCallback, useMemo } from 'react'
 import { useAppStore } from '../store/appStore'
 import { useChat } from '../hooks/useChat'
 import * as api from '../api/client'
@@ -26,6 +26,37 @@ function usageFractionUsed(e: AccountEntitlements): number | null {
 }
 
 type UsageFooter = { line: string; tone: 'admin' | 'warn' | 'limit' }
+
+/** First non-space token; must be exactly /search or /comps (aligns with backend). */
+function parseReapiSlashTokenAtStart(raw: string): { len: number } | null {
+  const m = raw.match(/^(\/[^\s]*)/)
+  if (!m) return null
+  const word = m[1]
+  const low = word.toLowerCase()
+  if (low !== '/search' && low !== '/comps') return null
+  return { len: word.length }
+}
+
+/** Hidden span with the textarea’s font/spacing so width matches actual line layout. */
+function measurePrefixWidthLikeTextarea(text: string, source: HTMLTextAreaElement): number {
+  const s = document.createElement('span')
+  const cs = getComputedStyle(source)
+  s.style.position = 'fixed'
+  s.style.left = '0'
+  s.style.top = '0'
+  s.style.visibility = 'hidden'
+  s.style.whiteSpace = 'pre'
+  s.style.pointerEvents = 'none'
+  s.style.font = cs.font
+  s.style.letterSpacing = cs.letterSpacing
+  s.style.wordSpacing = cs.wordSpacing
+  s.style.fontFeatureSettings = cs.fontFeatureSettings
+  s.textContent = text
+  document.body.appendChild(s)
+  const w = s.getBoundingClientRect().width
+  document.body.removeChild(s)
+  return Math.max(0, w)
+}
 
 function usageFooterCaption(e: AccountEntitlements): UsageFooter | null {
   if (e.is_admin) return { line: 'Unlimited usage (admin)', tone: 'admin' }
@@ -64,6 +95,42 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   const STICK_THRESHOLD_PX = 100
+
+  const propertyDataOn = llmOpts?.property_data_enabled === true
+  const [cmdHighlight, setCmdHighlight] = useState<{
+    left: number
+    top: number
+    width: number
+    height: number
+  } | null>(null)
+
+  const remeasureCmdHighlight = useCallback(() => {
+    const ta = textareaRef.current
+    if (!ta || !propertyDataOn) {
+      setCmdHighlight(null)
+      return
+    }
+    const v = ta.value
+    const token = v.length > 0 ? parseReapiSlashTokenAtStart(v) : null
+    if (!token) {
+      setCmdHighlight(null)
+      return
+    }
+    const prefix = v.slice(0, token.len)
+    const cs = getComputedStyle(ta)
+    const padL = parseFloat(cs.paddingLeft) || 0
+    const padT = parseFloat(cs.paddingTop) || 0
+    const rawW = measurePrefixWidthLikeTextarea(prefix, ta)
+    const lh = cs.lineHeight
+    const fs = parseFloat(cs.fontSize) || 14
+    const height = lh === 'normal' || lh === undefined ? fs * 1.25 : parseFloat(lh) || 20
+    setCmdHighlight({
+      left: padL,
+      top: padT - ta.scrollTop,
+      width: Math.max(1, Math.ceil(rawW)),
+      height,
+    })
+  }, [propertyDataOn])
 
   const syncStickToBottomFromScroll = useCallback(() => {
     const el = scrollRef.current
@@ -117,6 +184,20 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
   useEffect(() => {
     stickToBottomRef.current = true
   }, [projectId])
+
+  useLayoutEffect(() => {
+    remeasureCmdHighlight()
+  }, [input, remeasureCmdHighlight])
+
+  useLayoutEffect(() => {
+    const ta = textareaRef.current
+    if (!ta) return
+    const ro = new ResizeObserver(() => {
+      remeasureCmdHighlight()
+    })
+    ro.observe(ta)
+    return () => ro.disconnect()
+  }, [remeasureCmdHighlight])
 
   const usageFooter = entitlements ? usageFooterCaption(entitlements) : null
   const canSendChat = entitlements == null || entitlements.can_send_chat
@@ -233,6 +314,7 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
     }
     el.style.height = 'auto'
     el.style.height = Math.min(el.scrollHeight, 150) + 'px'
+    requestAnimationFrame(() => remeasureCmdHighlight())
   }
 
   const streamingMsg: ChatMessage | null = isStreaming && streamingContent
@@ -350,6 +432,12 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
       <div className="px-4 pt-3 pb-2 border-t border-white/5 bg-black/20">
         <p className="text-[10px] text-brand-cloud/35 mb-1.5 px-0.5">
           Type <span className="text-brand-cloud/50">@</span> to attach a document for this message.
+          {llmOpts?.property_data_enabled && (
+            <>
+              {' '}
+              <span className="text-brand-cloud/30">/search and /comps use RealEstateAPI (not MLS).</span>
+            </>
+          )}
         </p>
         {attachedDocs.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mb-2">
@@ -399,16 +487,32 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
             </ul>
           )}
         <div className="flex items-end gap-2 bg-white/[0.04] backdrop-blur-sm border border-white/10 rounded-xl px-3 py-2 focus-within:border-brand-mint/40 transition">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={handleInput}
-            onKeyDown={handleKeyDown}
-            disabled={isStreaming || !canSendChat}
-            placeholder="Ask reco-pilot about this client… (Enter to send, Shift+Enter for newline)"
-            rows={1}
-            className="flex-1 bg-transparent resize-none outline-none text-sm text-brand-cloud placeholder-brand-cloud/35 py-1 max-h-[150px] disabled:opacity-50"
-          />
+          <div className="flex-1 min-w-0 self-end max-h-[150px] min-h-0 relative overflow-hidden">
+            {cmdHighlight && (
+              <div
+                className="pointer-events-none absolute z-0 box-border rounded-md border border-brand-mint/35 bg-brand-mint/12 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]"
+                style={{
+                  left: cmdHighlight.left,
+                  top: cmdHighlight.top,
+                  width: cmdHighlight.width,
+                  height: cmdHighlight.height,
+                }}
+                aria-hidden
+              />
+            )}
+            <textarea
+              ref={textareaRef}
+              value={input}
+              onChange={handleInput}
+              onKeyDown={handleKeyDown}
+              onScroll={remeasureCmdHighlight}
+              disabled={isStreaming || !canSendChat}
+              placeholder="Ask reco-pilot about this client… (Enter to send, Shift+Enter for newline)"
+              rows={1}
+              spellCheck={!cmdHighlight}
+              className="w-full min-h-0 block relative z-10 bg-transparent resize-none outline-none text-sm leading-normal py-1 text-brand-cloud placeholder:text-brand-cloud/35 max-h-[150px] disabled:opacity-50 caret-brand-mint"
+            />
+          </div>
           {isStreaming ? (
             <button
               onClick={cancelStream}

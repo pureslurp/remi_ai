@@ -41,6 +41,8 @@ export type LlmOptionsResponse = {
   providers: LlmOptionProvider[]
   default_provider: string
   subscription_tier?: string
+  /** When false, property-data BFF, chat /search|/comps, and related UI are off (server `REALESTATEAPI_ENABLED=0` or no key). */
+  property_data_enabled?: boolean
 }
 
 export type SubscriptionTier = 'free' | 'trial' | 'pro' | 'max' | 'ultra'
@@ -77,6 +79,8 @@ export interface Property {
   city?: string
   state?: string
   zip_code?: string
+  /** RealEstateAPI property id for cheaper follow-up by id */
+  reapi_property_id?: string
   mls_number?: string
   list_price?: number
   beds?: number

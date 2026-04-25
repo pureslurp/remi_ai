@@ -3,6 +3,7 @@ import { useAppStore } from '../store/appStore'
 import * as api from '../api/client'
 import type { AccountEntitlements } from '../types'
 import SystemPromptSettings from './SystemPromptSettings'
+import PropertyDataHelpModal from './PropertyDataHelpModal'
 import UpgradePlanModal from './UpgradePlanModal'
 import ManageBillingModal from './ManageBillingModal'
 
@@ -20,6 +21,8 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [upgradeOpen, setUpgradeOpen] = useState(false)
   const [billingOpen, setBillingOpen] = useState(false)
+  const [propertyHelpOpen, setPropertyHelpOpen] = useState(false)
+  const [propertyDataEnabled, setPropertyDataEnabled] = useState(false)
   const [entitlements, setEntitlements] = useState<AccountEntitlements | null>(null)
   const ref = useRef<HTMLDivElement>(null)
 
@@ -32,6 +35,13 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
   // Fetch entitlements once on mount so we know the current tier
   useEffect(() => {
     loadEntitlements()
+  }, [])
+
+  useEffect(() => {
+    void api
+      .getLlmOptions()
+      .then(o => setPropertyDataEnabled(!!o.property_data_enabled))
+      .catch(() => setPropertyDataEnabled(false))
   }, [])
 
   useEffect(() => {
@@ -144,6 +154,18 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
           >
             AI prompt settings…
           </button>
+          {propertyDataEnabled && (
+            <button
+              type="button"
+              onClick={() => {
+                setOpen(false)
+                setPropertyHelpOpen(true)
+              }}
+              className="w-full text-left px-3 py-2 text-sm text-brand-cloud/90 hover:bg-white/[0.06] transition"
+            >
+              Property & Chat commands…
+            </button>
+          )}
           {hasStripeSubscription ? (
             <button
               type="button"
@@ -183,6 +205,9 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
         </div>
       )}
       <SystemPromptSettings open={settingsOpen} onClose={() => setSettingsOpen(false)} />
+      {propertyDataEnabled && (
+        <PropertyDataHelpModal open={propertyHelpOpen} onClose={() => setPropertyHelpOpen(false)} />
+      )}
       <UpgradePlanModal open={upgradeOpen} onClose={() => setUpgradeOpen(false)} />
       {entitlements && (
         <ManageBillingModal

@@ -252,7 +252,7 @@ if is_postgres():
 else:
     _bootstrap_sqlite()
 
-from routers import account, projects, properties, transactions, documents, chat, auth, gmail, drive, llm, billing
+from routers import account, projects, properties, transactions, documents, chat, auth, gmail, drive, llm, billing, property_data
 
 
 class ApiNoCacheMiddleware:
@@ -302,7 +302,7 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Context-Breakdown", "X-Context-Tokens"],
+    expose_headers=["X-Context-Breakdown", "X-Context-Tokens", "X-Reapi-Export"],
 )
 # Runs outermost on the response path so headers apply after CORS.
 app.add_middleware(ApiNoCacheMiddleware)
@@ -335,6 +335,7 @@ app.include_router(auth.router)
 app.include_router(gmail.router)
 app.include_router(drive.router)
 app.include_router(billing.router)
+app.include_router(property_data.router)
 
 
 @app.get("/api/health")

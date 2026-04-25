@@ -3,6 +3,7 @@ import { useAppStore } from '../store/appStore'
 import * as api from '../api/client'
 import type { Transaction, KeyDate, Property, Project } from '../types'
 import { getClientPanelCopy } from '../lib/clientPanelCopy'
+import AddressAutocompleteInput from './AddressAutocompleteInput'
 
 function fmtMoney(v?: number) {
   if (!v) return 'N/A'
@@ -389,12 +390,19 @@ function SellerListingEditor({
 function BuyerSellerListingSetup({
   projectId,
   onListed,
+  propertyDataEnabled,
 }: {
   projectId: string
   onListed: (prop: Property) => void
+  propertyDataEnabled: boolean
 }) {
   const { setProperties, properties } = useAppStore()
   const [addr, setAddr] = useState('')
+  const [addrExtra, setAddrExtra] = useState<{
+    city?: string
+    state?: string
+    zip_code?: string
+  }>({})
   const [listPrice, setListPrice] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -406,9 +414,13 @@ function BuyerSellerListingSetup({
       const prop = await api.createProperty(projectId, {
         address: addr.trim(),
         list_price: lp,
+        city: addrExtra.city,
+        state: addrExtra.state || 'MI',
+        zip_code: addrExtra.zip_code,
       })
       setProperties([...properties, prop])
       setAddr('')
+      setAddrExtra({})
       setListPrice('')
       onListed(prop)
     } finally {
@@ -419,11 +431,18 @@ function BuyerSellerListingSetup({
   return (
     <div className="space-y-2">
       <p className="text-xs text-gray-400">Add the home they are selling — offers go underneath.</p>
-      <input
+      <AddressAutocompleteInput
         className="w-full bg-gray-700/80 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-emerald-500"
-        placeholder="Listing street address"
+        placeholder={
+          propertyDataEnabled
+            ? 'Listing street address (type to see suggestions)'
+            : 'Listing street address'
+        }
         value={addr}
-        onChange={e => setAddr(e.target.value)}
+        onChange={setAddr}
+        onCommitStructured={p => setAddrExtra({ city: p.city, state: p.state, zip_code: p.zip_code })}
+        disabled={saving}
+        suggestionsEnabled={propertyDataEnabled}
       />
       <input
         className="w-full bg-gray-700/80 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-emerald-500"
@@ -444,9 +463,20 @@ function BuyerSellerListingSetup({
   )
 }
 
-function SellerSetupListingForm({ projectId }: { projectId: string }) {
+function SellerSetupListingForm({
+  projectId,
+  propertyDataEnabled,
+}: {
+  projectId: string
+  propertyDataEnabled: boolean
+}) {
   const { setProperties, properties } = useAppStore()
   const [addr, setAddr] = useState('')
+  const [addrExtra, setAddrExtra] = useState<{
+    city?: string
+    state?: string
+    zip_code?: string
+  }>({})
   const [listPrice, setListPrice] = useState('')
   const [saving, setSaving] = useState(false)
 
@@ -458,9 +488,13 @@ function SellerSetupListingForm({ projectId }: { projectId: string }) {
       const prop = await api.createProperty(projectId, {
         address: addr.trim(),
         list_price: lp,
+        city: addrExtra.city,
+        state: addrExtra.state || 'MI',
+        zip_code: addrExtra.zip_code,
       })
       setProperties([...properties, prop])
       setAddr('')
+      setAddrExtra({})
       setListPrice('')
     } finally {
       setSaving(false)
@@ -470,11 +504,18 @@ function SellerSetupListingForm({ projectId }: { projectId: string }) {
   return (
     <div className="space-y-2">
       <p className="text-xs text-gray-400">Add the home they are selling — offers go underneath.</p>
-      <input
+      <AddressAutocompleteInput
         className="w-full bg-gray-700/80 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-emerald-500"
-        placeholder="Listing street address"
+        placeholder={
+          propertyDataEnabled
+            ? 'Listing street address (type to see suggestions)'
+            : 'Listing street address'
+        }
         value={addr}
-        onChange={e => setAddr(e.target.value)}
+        onChange={setAddr}
+        onCommitStructured={p => setAddrExtra({ city: p.city, state: p.state, zip_code: p.zip_code })}
+        disabled={saving}
+        suggestionsEnabled={propertyDataEnabled}
       />
       <input
         className="w-full bg-gray-700/80 rounded-lg px-2 py-1.5 text-sm outline-none focus:ring-1 focus:ring-emerald-500"
@@ -504,6 +545,7 @@ export default function TransactionPanel({
   onProjectUpdated,
 }: Props) {
   const { setTransactions, setProperties } = useAppStore()
+  const [propertyDataEnabled, setPropertyDataEnabled] = useState(false)
   const [addingTx, setAddingTx] = useState(false)
   const [showHistory, setShowHistory] = useState(false)
   const [newOffer, setNewOffer] = useState('')
@@ -519,6 +561,13 @@ export default function TransactionPanel({
   const [bsBuyClose, setBsBuyClose] = useState('')
   const [showPastSaleOffers, setShowPastSaleOffers] = useState(false)
   const [showPastBuys, setShowPastBuys] = useState(false)
+
+  useEffect(() => {
+    void api
+      .getLlmOptions()
+      .then(o => setPropertyDataEnabled(!!o.property_data_enabled))
+      .catch(() => setPropertyDataEnabled(false))
+  }, [])
 
   const copy = getClientPanelCopy(clientType)
   const txsForProject = transactions.filter(t => t.project_id === projectId)
@@ -575,7 +624,7 @@ export default function TransactionPanel({
           {listingProp ? (
             <SellerListingEditor projectId={projectId} property={listingProp} />
           ) : (
-            <SellerSetupListingForm projectId={projectId} />
+            <SellerSetupListingForm projectId={projectId} propertyDataEnabled={propertyDataEnabled} />
           )}
         </div>
 
@@ -790,6 +839,7 @@ export default function TransactionPanel({
             ) : (
               <BuyerSellerListingSetup
                 projectId={projectId}
+                propertyDataEnabled={propertyDataEnabled}
                 onListed={async prop => {
                   if (!onProjectUpdated) return
                   const u = await api.updateProject(projectId, { sale_property_id: prop.id })
