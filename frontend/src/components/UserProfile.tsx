@@ -161,7 +161,7 @@ export default function UserProfile({ compact = false }: { compact?: boolean }) 
               Upgrade plan
             </button>
           ) : null}
-          {!googleConnected && (
+          {authProvider === 'google' && !googleConnected && (
             <button
               type="button"
               onClick={() => {

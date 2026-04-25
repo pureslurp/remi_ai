@@ -15,9 +15,9 @@ const LS_SIDEBAR = 'reco.layout.sidebarWidth'
 const LS_RIGHT = 'reco.layout.rightPanelWidth'
 const LS_SIDEBAR_MODE = 'reco.layout.sidebarMode'
 
-const SIDEBAR = { min: 200, max: 440, def: 220 } as const
+const SIDEBAR = { min: 200, max: 440, def: 280 } as const
 const SIDEBAR_RAIL = 52
-const RIGHT_PANEL = { min: 240, max: 560, def: 300 } as const
+const RIGHT_PANEL = { min: 260, max: 560, def: 420 } as const
 
 type SidebarMode = 'expanded' | 'collapsed' | 'hidden'
 
@@ -157,8 +157,12 @@ export default function App() {
   const activeProject = projects.find(p => p.id === activeProjectId)
 
   const googleConnected = useAppStore(s => s.googleConnected)
+  const authProvider = useAppStore(s => s.authProvider)
   const [googleBannerDismissed, setGoogleBannerDismissed] = useState(false)
-  const showGoogleBanner = sessionUnlocked && !googleConnected && !googleBannerDismissed
+  // Only prompt users who signed in with Google but have no OAuth tokens (rare / recovery).
+  // Email/password accounts must not see this — linking Google would use a different identity.
+  const showGoogleBanner =
+    sessionUnlocked && authProvider === 'google' && !googleConnected && !googleBannerDismissed
 
   const handleConnectGoogle = async () => {
     try {

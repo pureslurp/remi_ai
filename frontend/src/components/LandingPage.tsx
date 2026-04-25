@@ -40,6 +40,11 @@ function GoogleMark({ className }: { className?: string }) {
 
 type Plan = 'free' | 'pro' | 'max' | 'ultra'
 
+function isConsumerGmailAddress(email: string): boolean {
+  const d = email.trim().toLowerCase().split('@').pop()
+  return d === 'gmail.com' || d === 'googlemail.com'
+}
+
 const PLAN_OPTIONS: { id: Plan; label: string; price: string }[] = [
   { id: 'free', label: 'Free', price: '$0' },
   { id: 'pro', label: 'Pro', price: '$20/mo' },
@@ -86,6 +91,12 @@ function AuthModal({ mode, initialPlan = 'free', onClose, onModeChange, onEmailA
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    if (isConsumerGmailAddress(email)) {
+      setError(
+        'Gmail addresses must use Continue with Google. Email and password are not available for @gmail.com.',
+      )
+      return
+    }
     setEmailBusy(true)
     try {
       if (mode === 'signup') {
@@ -246,6 +257,12 @@ function AuthModal({ mode, initialPlan = 'free', onClose, onModeChange, onEmailA
             disabled={busy}
             className="w-full rounded-xl border border-white/12 bg-white/[0.04] px-4 py-2.5 text-sm text-brand-cloud placeholder:text-brand-cloud/30 outline-none focus:border-white/25 focus:bg-white/[0.07] transition disabled:opacity-50"
           />
+          {isConsumerGmailAddress(email) && (
+            <p className="text-xs leading-relaxed text-brand-mint/75">
+              Use <strong className="text-brand-mint">Continue with Google</strong> for @gmail.com — email and password
+              sign-in is not available for consumer Gmail.
+            </p>
+          )}
           <input
             type="password"
             placeholder="Password (8+ characters)"

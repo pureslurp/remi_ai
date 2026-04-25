@@ -42,6 +42,22 @@ from services.usage_entitlements import default_subscription_tier_for_new_accoun
 
 _EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
+# Consumer Gmail must use Google OAuth (Gmail/Drive sync, correct identity). Workspace
+# domains (anything not @gmail.com / @googlemail.com) may still use email/password.
+_CONSUMER_GMAIL_EMAIL_AUTH_MSG = (
+    "Gmail addresses must use Continue with Google. "
+    "Email and password sign-up and sign-in are not available for @gmail.com or @googlemail.com."
+)
+
+
+def _is_consumer_gmail_address(email: str) -> bool:
+    raw = email.strip().lower()
+    if "@" not in raw:
+        return False
+    domain = raw.rsplit("@", 1)[-1]
+    return domain in ("gmail.com", "googlemail.com")
+
+
 logger = logging.getLogger("reco.auth")
 
 # Short-lived cookie that binds the OAuth `state` param to this browser.
@@ -167,6 +183,8 @@ def _set_session_cookie(response: Response, request: Request, account_id: str) -
 def email_signup(body: SignupRequest, request: Request, db: Session = Depends(get_db)):
     if not _EMAIL_RE.match(body.email):
         raise HTTPException(400, "Invalid email address.")
+    if _is_consumer_gmail_address(body.email):
+        raise HTTPException(400, _CONSUMER_GMAIL_EMAIL_AUTH_MSG)
     if len(body.password) < 8:
         raise HTTPException(400, "Password must be at least 8 characters.")
 
@@ -217,6 +235,8 @@ def email_signup(body: SignupRequest, request: Request, db: Session = Depends(ge
 
 @router.post("/login")
 def email_login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
+    if _is_consumer_gmail_address(body.email):
+        raise HTTPException(400, _CONSUMER_GMAIL_EMAIL_AUTH_MSG)
     account = db.query(Account).filter(Account.email == body.email).first()
     if not account:
         raise HTTPException(401, "Invalid email or password.")

@@ -101,7 +101,8 @@ interface Props {
 }
 
 export default function ClientSettings({ project, onProjectUpdated }: Props) {
-  const { properties, transactions, documents, emailThreads, setDocuments, setEmailThreads, googleConnected } = useAppStore()
+  const { properties, transactions, documents, emailThreads, setDocuments, setEmailThreads, googleConnected, authProvider } =
+    useAppStore()
 
   const [name, setName] = useState(project.name)
   const [phone, setPhone] = useState(project.phone || '')
@@ -353,6 +354,13 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
 
         {/* Gmail */}
         <Section title="Gmail Sync" defaultOpen={false}>
+          {authProvider === 'email' ? (
+            <p className="rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2.5 text-[11px] leading-relaxed text-brand-cloud/65">
+              You&apos;re signed in with email and password. Chat and documents you upload manually work as usual.
+              Gmail and Google Drive sync are not available on this account type.
+            </p>
+          ) : (
+            <>
           <p className="text-xs text-brand-cloud/50 mb-3 leading-relaxed">
             A thread syncs when the client’s address appears in From, To, or Cc. Use subject phrases below to narrow or exclude mail when adding an address — or open an existing address for details.
           </p>
@@ -499,7 +507,7 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
               />
             </label>
           </div>
-          {!googleConnected && (
+          {authProvider === 'google' && !googleConnected && (
             <p className="text-xs text-amber-300 mb-2">Connect Google in settings to enable sync.</p>
           )}
           <SyncStatus
@@ -588,10 +596,18 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
               </ul>
             </div>
           )}
+            </>
+          )}
         </Section>
 
         {/* Drive */}
         <Section title="Google Drive Sync" defaultOpen={false}>
+          {authProvider === 'email' && (
+            <p className="mb-3 text-[11px] leading-relaxed text-brand-cloud/55">
+              Drive folder sync isn&apos;t available on email-only accounts. Add files under{' '}
+              <span className="text-brand-cloud/70">Documents</span> above instead.
+            </p>
+          )}
           <div className="flex gap-2 mb-3">
             <input
               className="flex-1 bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-xs text-brand-cloud placeholder-brand-cloud/35 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50"
