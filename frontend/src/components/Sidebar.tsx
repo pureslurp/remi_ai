@@ -420,21 +420,27 @@ export default function Sidebar({
                 onClick={() => setActiveProject(p.id)}
                 className="min-w-0 flex-1 px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-mint/35 disabled:opacity-40"
               >
-                <div className="flex items-center gap-2">
-                  <span className={`text-sm truncate flex-1 ${isActive ? 'text-brand-cloud font-medium' : 'text-brand-cloud/85'}`}>
-                    {p.name}
-                  </span>
-                  <span
-                    className={`text-[10px] px-2 py-0.5 rounded-full font-medium uppercase tracking-wide ${clientTypeSidebarPillClass(
-                      p.client_type,
-                    )}`}
+                <div className="min-w-0">
+                  <p
+                    className={`text-sm truncate ${isActive ? 'text-brand-cloud font-medium' : 'text-brand-cloud/85'}`}
+                    title={p.name}
                   >
-                    {p.client_type}
-                  </span>
+                    {p.name}
+                  </p>
+                  <div className="mt-1 flex min-w-0 items-center justify-between gap-2">
+                    <p className="shrink-0 text-[11px] text-brand-cloud/40">
+                      {new Date(p.created_at).toLocaleDateString()}
+                    </p>
+                    <span
+                      className={`min-w-0 max-w-[11rem] shrink truncate text-[10px] px-2 py-0.5 rounded-full font-medium uppercase tracking-wide ${clientTypeSidebarPillClass(
+                        p.client_type,
+                      )}`}
+                      title={p.client_type}
+                    >
+                      {p.client_type}
+                    </span>
+                  </div>
                 </div>
-                <p className="text-[11px] text-brand-cloud/40 mt-0.5">
-                  {new Date(p.created_at).toLocaleDateString()}
-                </p>
               </button>
               <button
                 type="button"
