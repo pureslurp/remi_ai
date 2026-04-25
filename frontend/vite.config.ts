@@ -12,8 +12,8 @@ export default defineConfig(({ mode }) => {
       name: 'absolute-open-graph-urls',
       transformIndexHtml(html) {
         if (!siteOrigin) return html
-        const image = `${siteOrigin}/og-image.svg`
-        return html.replaceAll('content="/og-image.svg"', `content="${image}"`)
+        const image = `${siteOrigin}/og-image.png`
+        return html.replaceAll('content="/og-image.png"', `content="${image}"`)
       },
     },
   ],
