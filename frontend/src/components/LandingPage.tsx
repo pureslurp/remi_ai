@@ -485,7 +485,9 @@ export default function LandingPage({ needsDeviceLink, onEmailAuth }: Props) {
             style={{ animationDelay: '180ms' }}
           >
             <div className="absolute -right-6 -top-6 hidden h-28 w-28 rounded-full border border-white/[0.06] lg:block" aria-hidden />
-            <p className="font-landing-display text-lg font-medium italic text-brand-cloud/85">For agents with too many tabs open</p>
+            <p className="font-landing-display text-lg font-medium italic text-brand-cloud/85">
+              For agents who want to get the most out of AI
+            </p>
             <ul className="mt-6 space-y-4 text-sm leading-relaxed text-brand-cloud/60">
               <li className="flex gap-3">
                 <span className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-brand-mint/80" aria-hidden />
