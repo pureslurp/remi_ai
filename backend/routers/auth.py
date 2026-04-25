@@ -13,7 +13,7 @@ from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from fastapi.responses import JSONResponse, RedirectResponse
-from passlib.hash import bcrypt
+import bcrypt
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -187,7 +187,10 @@ def email_signup(body: SignupRequest, request: Request, db: Session = Depends(ge
             email=body.email,
             name=body.name,
             auth_provider="email",
-            password_hash=bcrypt.hash(body.password),
+            password_hash=bcrypt.hashpw(
+                body.password.encode("utf-8"),
+                bcrypt.gensalt(),
+            ).decode("utf-8"),
             subscription_tier=default_subscription_tier_for_new_account(account_id),
             created_at=now,
             updated_at=now,
@@ -215,9 +218,21 @@ def email_signup(body: SignupRequest, request: Request, db: Session = Depends(ge
 @router.post("/login")
 def email_login(body: LoginRequest, request: Request, db: Session = Depends(get_db)):
     account = db.query(Account).filter(Account.email == body.email).first()
-    if not account or not account.password_hash:
+    if not account:
         raise HTTPException(401, "Invalid email or password.")
-    if not bcrypt.verify(body.password, account.password_hash):
+    if not account.password_hash:
+        raise HTTPException(
+            401,
+            "This email is registered with Google. Use Continue with Google to sign in.",
+        )
+    try:
+        pwd_ok = bcrypt.checkpw(
+            body.password.encode("utf-8"),
+            account.password_hash.encode("utf-8"),
+        )
+    except (ValueError, TypeError):
+        pwd_ok = False
+    if not pwd_ok:
         raise HTTPException(401, "Invalid email or password.")
 
     google_connected = (
