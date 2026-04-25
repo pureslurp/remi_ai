@@ -81,23 +81,29 @@ function AddKeyDateForm({ projectId, txId, onAdded }: {
   }
 
   return (
-    <div className="flex gap-1 mt-1">
+    <div className="mt-1 min-w-0 space-y-1">
       <input
-        className="flex-1 bg-white/[0.04] border border-white/10 rounded px-2 py-1 text-xs text-brand-cloud placeholder-brand-cloud/35 outline-none focus:border-brand-mint/50"
+        className="w-full rounded border border-white/10 bg-white/[0.04] px-2 py-1 text-xs text-brand-cloud placeholder-brand-cloud/35 outline-none focus:border-brand-mint/50"
         placeholder="Date label (e.g. Inspection deadline)"
         value={label}
         onChange={e => setLabel(e.target.value)}
         onKeyDown={e => e.key === 'Enter' && submit()}
       />
-      <input
-        type="date"
-        className="bg-white/[0.04] border border-white/10 rounded px-2 py-1 text-xs text-brand-cloud outline-none focus:border-brand-mint/50"
-        value={date}
-        onChange={e => setDate(e.target.value)}
-      />
-      <button onClick={submit} className="bg-brand-mint text-brand-navy hover:bg-brand-mint/90 px-2 py-1 rounded text-xs font-semibold transition">
-        Add
-      </button>
+      <div className="flex min-w-0 gap-1">
+        <input
+          type="date"
+          className="min-w-0 flex-1 rounded border border-white/10 bg-white/[0.04] px-2 py-1 text-xs text-brand-cloud outline-none focus:border-brand-mint/50"
+          value={date}
+          onChange={e => setDate(e.target.value)}
+        />
+        <button
+          type="button"
+          onClick={submit}
+          className="shrink-0 rounded bg-brand-mint px-2 py-1 text-xs font-semibold text-brand-navy transition hover:bg-brand-mint/90"
+        >
+          Add
+        </button>
+      </div>
     </div>
   )
 }
@@ -147,7 +153,7 @@ function TransactionCard({
   const statusColor = STATUS_COLORS[tx.status] ?? 'bg-white/[0.05] text-brand-cloud/50 border border-white/10'
 
   return (
-    <div className="bg-white/[0.03] border border-white/10 rounded-xl mb-3 overflow-hidden">
+    <div className="mb-3 min-w-0 max-w-full overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
       {/* Header — always visible */}
       <button
         className="w-full flex items-center justify-between px-3 py-2.5 hover:bg-white/[0.05] transition text-left"
@@ -561,7 +567,7 @@ export default function TransactionPanel({
 
   if (clientType === 'seller') {
     return (
-      <div>
+      <div className="min-w-0 max-w-full">
         <p className="text-xs text-gray-500 mb-2">{copy.transactionsSubtitle}</p>
 
         <div className="bg-gray-800/60 rounded-xl p-3 mb-4 border border-gray-700/40">
@@ -755,7 +761,7 @@ export default function TransactionPanel({
     }
 
     return (
-      <div className="space-y-6">
+      <div className="min-w-0 max-w-full space-y-6">
         <p className="text-xs text-gray-500">{copy.transactionsSubtitle}</p>
 
         {/* —— Seller workspace: listing + offers on that listing —— */}
@@ -906,7 +912,7 @@ export default function TransactionPanel({
             <p className="text-xs text-gray-500 mt-1">{buyerCopy.transactionsSubtitle}</p>
           </div>
 
-          <div className="flex justify-end mb-2">
+          <div className="mb-2 flex min-w-0 justify-end pr-0.5">
             <button
               type="button"
               onClick={() => {
@@ -915,7 +921,7 @@ export default function TransactionPanel({
                 setBsBuyOffer('')
                 setBsBuyClose('')
               }}
-              className="text-xs text-blue-400 hover:text-blue-300 transition"
+              className="shrink-0 text-xs text-blue-400 transition hover:text-blue-300"
             >
               + Add
             </button>
@@ -1015,16 +1021,16 @@ export default function TransactionPanel({
   }
 
   return (
-    <div>
-      <p className="text-xs text-gray-500 mb-2">{copy.transactionsSubtitle}</p>
+    <div className="min-w-0 max-w-full">
+      <p className="mb-2 text-xs text-gray-500">{copy.transactionsSubtitle}</p>
       {listingHint && (
-        <p className="text-xs text-amber-500/90 mb-2">{listingHint}</p>
+        <p className="mb-2 text-xs text-amber-500/90">{listingHint}</p>
       )}
-      <div className="flex justify-end mb-2">
+      <div className="mb-2 flex min-w-0 justify-end pr-0.5">
         <button
           type="button"
           onClick={() => setAddingTx(!addingTx)}
-          className="text-xs text-blue-400 hover:text-blue-300 transition"
+          className="shrink-0 text-xs text-blue-400 transition hover:text-blue-300"
         >
           + Add
         </button>

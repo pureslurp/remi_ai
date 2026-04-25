@@ -79,15 +79,16 @@ function Section({ title, defaultOpen = true, children }: {
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <section>
+    <section className="min-w-0">
       <button
+        type="button"
         onClick={() => setOpen(o => !o)}
-        className="w-full flex items-center justify-between mb-2 group"
+        className="group mb-2 flex w-full min-w-0 items-center justify-between gap-2"
       >
-        <h3 className="text-[11px] font-semibold uppercase tracking-[0.15em] text-brand-cloud/55 group-hover:text-brand-cloud transition">
+        <h3 className="min-w-0 flex-1 truncate text-left text-[11px] font-semibold uppercase tracking-[0.15em] text-brand-cloud/55 transition group-hover:text-brand-cloud">
           {title}
         </h3>
-        <span className="text-brand-cloud/35 group-hover:text-brand-cloud/65 transition text-xs">{open ? '▲' : '▼'}</span>
+        <span className="shrink-0 text-xs text-brand-cloud/35 transition group-hover:text-brand-cloud/65">{open ? '▲' : '▼'}</span>
       </button>
       {open && children}
     </section>
@@ -291,8 +292,8 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
   }
 
   return (
-    <div className={`overflow-y-auto h-full ${panelCopy.panelAccentClass}`}>
-      <div className="p-4 space-y-5">
+    <div className={`h-full min-w-0 overflow-y-auto ${panelCopy.panelAccentClass}`}>
+      <div className="min-w-0 space-y-5 p-4">
 
         {/* Profile */}
         <Section title="Client">

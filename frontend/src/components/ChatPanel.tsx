@@ -57,8 +57,20 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
   const [llmLoading, setLlmLoading] = useState(true)
   const [llmSaving, setLlmSaving] = useState(false)
   const [entitlements, setEntitlements] = useState<AccountEntitlements | null>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  /** When false, the user has scrolled up — do not yank the view on each stream chunk. */
+  const stickToBottomRef = useRef(true)
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const STICK_THRESHOLD_PX = 100
+
+  const syncStickToBottomFromScroll = useCallback(() => {
+    const el = scrollRef.current
+    if (!el) return
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+    stickToBottomRef.current = distance <= STICK_THRESHOLD_PX
+  }, [])
 
   const projectDocs = useMemo(
     () => documents.filter(d => d.project_id === projectId).sort((a, b) => a.filename.localeCompare(b.filename)),
@@ -102,6 +114,10 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
     refreshEntitlements()
   }, [projectId, refreshEntitlements])
 
+  useEffect(() => {
+    stickToBottomRef.current = true
+  }, [projectId])
+
   const usageFooter = entitlements ? usageFooterCaption(entitlements) : null
   const canSendChat = entitlements == null || entitlements.can_send_chat
   const hasStripeSubscription =
@@ -135,9 +151,10 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
   }
 
   useEffect(() => {
+    if (!stickToBottomRef.current) return
     // 'auto' = jump to bottom with no scroll animation (smooth looked jarring when switching clients).
     bottomRef.current?.scrollIntoView({ behavior: 'auto', block: 'end' })
-  }, [projectId, messages, streamingContent])
+  }, [projectId, messages, streamingContent, isStreaming])
 
   const pickDocument = (doc: Document) => {
     setAttachedDocs(prev => (prev.some(p => p.id === doc.id) ? prev : [...prev, { id: doc.id, filename: doc.filename }]))
@@ -163,6 +180,7 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
   const handleSend = async () => {
     const text = input.trim()
     if (!text || isStreaming || !canSendChat) return
+    stickToBottomRef.current = true
     setInput('')
     if (textareaRef.current) textareaRef.current.style.height = 'auto'
     const atts = attachedDocs.map(d => ({ type: 'document' as const, id: d.id }))
@@ -288,7 +306,11 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto px-6 py-4">
+      <div
+        ref={scrollRef}
+        className="flex-1 overflow-y-auto px-6 py-4"
+        onScroll={syncStickToBottomFromScroll}
+      >
         {messages.length === 0 && !isStreaming && (
           <div className="flex flex-col items-center justify-center h-full text-center">
             <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center text-2xl font-semibold text-brand-cloud tracking-tight mb-4">

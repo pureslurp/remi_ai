@@ -701,8 +701,78 @@ You’re aligning on **her** risk tolerance — not deciding for her.`,
   }
 }
 
+function PreviewContextPanel({ client }: { client: PreviewClient }) {
+  return (
+    <div className="max-h-full min-h-0 flex-1 overflow-y-auto overscroll-contain p-3 [-webkit-overflow-scrolling:touch]">
+      <p className="mb-2 text-[9px] font-semibold uppercase tracking-[0.15em] text-brand-mint/70">In context</p>
+
+      <button type="button" className="mb-1 flex w-full items-center justify-between group" tabIndex={-1}>
+        <span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-brand-cloud/55 group-hover:text-brand-cloud">
+          Active transaction
+        </span>
+        <span className="text-[10px] text-brand-cloud/35">▲</span>
+      </button>
+      <div className="rounded-lg border border-white/10 bg-white/[0.03] p-2">
+        <p className="truncate text-[10px] font-medium text-brand-cloud">{client.propertyLine}</p>
+        <p className="mt-1 text-[10px] text-brand-cloud/55">{client.offerLine}</p>
+        <div className="mt-2 space-y-1">
+          {client.keyDates.map(kd => (
+            <div
+              key={kd.label}
+              className={`flex items-center justify-between rounded px-1.5 py-1 ${
+                kd.urgent ? 'border border-orange-400/30 bg-orange-400/10' : 'border border-white/5 bg-white/[0.03]'
+              }`}
+            >
+              <span className="text-[9px] text-brand-cloud/90">{kd.label}</span>
+              <span className={`text-[9px] shrink-0 ${kd.urgent ? 'font-medium text-orange-200' : 'text-brand-cloud/50'}`}>
+                {kd.date}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <button type="button" className="mt-4 mb-1 flex w-full items-center justify-between group" tabIndex={-1}>
+        <span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-brand-cloud/55">Email sync</span>
+        <span className="text-[10px] text-brand-cloud/35">▲</span>
+      </button>
+      <p className="mb-2 rounded border border-white/5 bg-white/[0.02] px-2 py-1.5 text-[9px] leading-snug text-brand-cloud/50">
+        Threads involving <span className="text-brand-cloud/75">{client.gmailLine}</span> are indexed into this workspace.
+      </p>
+      <ul className="space-y-1.5">
+        {client.emailThreads.map(t => (
+          <li key={t.subject} className="rounded border border-white/8 bg-black/25 px-2 py-1.5 text-[9px] text-brand-cloud/60">
+            <p className="font-medium text-brand-mint/90 line-clamp-2">{t.subject}</p>
+            <p className="mt-0.5 line-clamp-2 text-brand-cloud/45">{t.preview}</p>
+          </li>
+        ))}
+      </ul>
+
+      <button type="button" className="mt-4 mb-1 flex w-full items-center justify-between group" tabIndex={-1}>
+        <span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-brand-cloud/55">Documents</span>
+        <span className="text-[10px] text-brand-cloud/35">▲</span>
+      </button>
+      <ul className="space-y-1">
+        {client.documents.map(doc => (
+          <li key={doc} className="truncate rounded border border-white/5 px-1.5 py-1 font-mono text-[9px] text-brand-cloud/65">
+            {doc}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+type MobilePreviewPane = 'chat' | 'sources'
+
+const PREVIEW_TAB_CHAT_ID = 'landing-preview-tab-chat'
+const PREVIEW_TAB_SOURCES_ID = 'landing-preview-tab-sources'
+const PREVIEW_PANEL_CHAT_ID = 'landing-preview-panel-chat'
+const PREVIEW_PANEL_SOURCES_ID = 'landing-preview-panel-sources'
+
 export default function LandingAppPreview() {
   const [activeId, setActiveId] = useState(CLIENTS[0].id)
+  const [mobilePane, setMobilePane] = useState<MobilePreviewPane>('chat')
   const client = useMemo(() => CLIENTS.find(c => c.id === activeId) ?? CLIENTS[0], [activeId])
   const turns = useMemo(() => threadForClient(client.id), [client.id])
   const chatScrollRef = useRef<HTMLDivElement>(null)
@@ -742,9 +812,9 @@ export default function LandingAppPreview() {
           <span className="ml-2 font-mono text-[10px] text-brand-cloud/35">app / signed-in</span>
         </div>
 
-        <div className="flex min-h-[440px] max-h-[min(62vh,600px)] text-[11px] font-sans leading-snug sm:min-h-[460px]">
-          {/* Sidebar */}
-          <div className="flex w-[min(44%,230px)] shrink-0 flex-col border-r border-white/5 bg-black/25 backdrop-blur-sm">
+        <div className="flex min-h-[min(52dvh,440px)] max-h-[min(62vh,600px)] flex-col text-[11px] font-sans leading-snug sm:min-h-[460px] md:min-h-[460px] md:flex-row">
+          {/* Sidebar — desktop only */}
+          <aside className="hidden w-[min(44%,230px)] shrink-0 flex-col border-r border-white/5 bg-black/25 backdrop-blur-sm md:flex">
             <div className="shrink-0 border-b border-white/5 p-3">
               <div className="mb-2 flex items-center gap-2">
                 <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-gradient-to-br from-brand-navy to-brand-slate">
@@ -788,124 +858,150 @@ export default function LandingAppPreview() {
                 )
               })}
             </div>
-          </div>
+          </aside>
 
-          {/* Chat */}
-          <div className="flex min-w-0 flex-1 flex-col border-x border-white/5">
-            <div className="shrink-0 border-b border-white/5 bg-black/20 px-4 py-2.5">
-              <h3 className="text-[12px] font-semibold tracking-tight text-brand-cloud">{client.name}</h3>
-              <p className="mt-0.5 text-[9px] uppercase tracking-[0.15em] text-brand-cloud/40">Reco Pilot</p>
-            </div>
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col md:flex-row">
             <div
-              ref={chatScrollRef}
-              className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3 scroll-smooth"
-              tabIndex={0}
-              aria-label={`Sample conversation for ${client.name}`}
+              className="flex shrink-0 border-b border-white/5 bg-black/30 md:hidden"
+              role="tablist"
+              aria-label="Preview workspace"
+              onKeyDown={e => {
+                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return
+                e.preventDefault()
+                setMobilePane(p => (p === 'chat' ? 'sources' : 'chat'))
+              }}
             >
-              {turns.map((turn, idx) =>
-                turn.role === 'user' ? (
-                  <div key={idx} className="flex justify-end">
-                    <div className="max-w-[90%] rounded-2xl rounded-br-sm bg-brand-mint px-3 py-2 text-[11px] font-medium leading-relaxed text-brand-navy">
-                      {turn.text}
-                    </div>
-                  </div>
-                ) : (
-                  <div key={idx} className="flex justify-start">
-                    <div className="mr-1.5 mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-gradient-to-br from-brand-navy to-brand-slate text-[9px] font-semibold tracking-tight text-brand-cloud">
-                      R
-                    </div>
-                    <div className="min-w-0 max-w-[92%] rounded-2xl rounded-bl-sm border border-white/10 bg-white/[0.03] px-3 py-2 text-brand-cloud/90 backdrop-blur-sm">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={previewAssistantMarkdownComponents}
-                      >
-                        {normalizeChatMarkdown(turn.text)}
-                      </ReactMarkdown>
-                    </div>
-                  </div>
-                ),
-              )}
-              <p className="pb-1 text-center text-[9px] text-brand-cloud/35">Scroll for more · sample only</p>
-            </div>
-            <div className="shrink-0 border-t border-white/5 bg-black/20 px-3 py-2">
-              <div className="flex items-end gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 backdrop-blur-sm">
-                <div className="flex-1 py-0.5 text-[10px] text-brand-cloud/35">Ask Reco about this client…</div>
-                <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-brand-mint/50" aria-hidden>
-                  <svg className="h-3 w-3 rotate-90 text-brand-navy/60" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Right column — context sources */}
-          <div className="hidden w-[min(40%,252px)] shrink-0 flex-col border-l border-white/5 bg-black/20 backdrop-blur-sm md:flex">
-            <div className="max-h-full min-h-0 flex-1 overflow-y-auto p-3">
-              <p className="mb-2 text-[9px] font-semibold uppercase tracking-[0.15em] text-brand-mint/70">In context</p>
-
-              <button type="button" className="mb-1 flex w-full items-center justify-between group" tabIndex={-1}>
-                <span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-brand-cloud/55 group-hover:text-brand-cloud">
-                  Active transaction
-                </span>
-                <span className="text-[10px] text-brand-cloud/35">▲</span>
+              <button
+                type="button"
+                role="tab"
+                id={PREVIEW_TAB_CHAT_ID}
+                aria-selected={mobilePane === 'chat'}
+                aria-controls={PREVIEW_PANEL_CHAT_ID}
+                tabIndex={mobilePane === 'chat' ? 0 : -1}
+                onClick={() => setMobilePane('chat')}
+                className={`min-h-11 flex-1 px-3 py-2.5 text-xs font-semibold tracking-tight transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-mint/45 focus-visible:ring-inset ${
+                  mobilePane === 'chat'
+                    ? 'border-b-2 border-brand-mint bg-white/[0.04] text-brand-cloud'
+                    : 'text-brand-cloud/50 hover:bg-white/[0.03] hover:text-brand-cloud/80'
+                }`}
+              >
+                Chat
               </button>
-              <div className="rounded-lg border border-white/10 bg-white/[0.03] p-2">
-                <p className="truncate text-[10px] font-medium text-brand-cloud">{client.propertyLine}</p>
-                <p className="mt-1 text-[10px] text-brand-cloud/55">{client.offerLine}</p>
-                <div className="mt-2 space-y-1">
-                  {client.keyDates.map(kd => (
-                    <div
-                      key={kd.label}
-                      className={`flex items-center justify-between rounded px-1.5 py-1 ${
-                        kd.urgent
-                          ? 'border border-orange-400/30 bg-orange-400/10'
-                          : 'border border-white/5 bg-white/[0.03]'
+              <button
+                type="button"
+                role="tab"
+                id={PREVIEW_TAB_SOURCES_ID}
+                aria-selected={mobilePane === 'sources'}
+                aria-controls={PREVIEW_PANEL_SOURCES_ID}
+                tabIndex={mobilePane === 'sources' ? 0 : -1}
+                onClick={() => setMobilePane('sources')}
+                className={`min-h-11 flex-1 px-3 py-2.5 text-xs font-semibold tracking-tight transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-mint/45 focus-visible:ring-inset ${
+                  mobilePane === 'sources'
+                    ? 'border-b-2 border-brand-mint bg-white/[0.04] text-brand-cloud'
+                    : 'text-brand-cloud/50 hover:bg-white/[0.03] hover:text-brand-cloud/80'
+                }`}
+              >
+                Sources
+              </button>
+            </div>
+
+            {mobilePane === 'chat' && (
+              <div
+                className="flex shrink-0 snap-x snap-mandatory gap-2 overflow-x-auto overscroll-x-contain border-b border-white/5 bg-black/25 px-3 py-2.5 [-webkit-overflow-scrolling:touch] [scrollbar-width:thin] md:hidden"
+                role="list"
+                aria-label="Choose sample client"
+              >
+                {CLIENTS.map(c => {
+                  const isActive = c.id === activeId
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      role="listitem"
+                      onClick={() => setActiveId(c.id)}
+                      aria-pressed={isActive}
+                      className={`flex min-h-[44px] w-[min(42vw,10.5rem)] shrink-0 snap-start flex-col justify-center rounded-xl border px-2.5 py-2 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-mint/45 focus-visible:ring-offset-2 focus-visible:ring-offset-[#18181b] ${
+                        isActive
+                          ? 'border-brand-mint bg-white/[0.08]'
+                          : 'border-white/10 bg-white/[0.02] hover:border-white/15 hover:bg-white/[0.05]'
                       }`}
                     >
-                      <span className="text-[9px] text-brand-cloud/90">{kd.label}</span>
-                      <span className={`text-[9px] shrink-0 ${kd.urgent ? 'font-medium text-orange-200' : 'text-brand-cloud/50'}`}>
-                        {kd.date}
+                      <span className={`truncate text-[12px] leading-tight ${isActive ? 'font-semibold text-brand-cloud' : 'font-medium text-brand-cloud/85'}`}>
+                        {c.name}
                       </span>
+                      <span
+                        className={`mt-1 inline-flex max-w-full shrink-0 self-start truncate rounded-full px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide ${clientTypeSidebarPillClass(c.type)}`}
+                        title={c.type}
+                      >
+                        {c.type}
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+
+            <div
+              id={PREVIEW_PANEL_CHAT_ID}
+              role="tabpanel"
+              aria-labelledby={PREVIEW_TAB_CHAT_ID}
+              className={`flex min-h-0 min-w-0 flex-1 flex-col border-white/5 md:border-x ${mobilePane === 'sources' ? 'hidden md:flex' : ''}`}
+            >
+              <div className="shrink-0 border-b border-white/5 bg-black/20 px-4 py-2.5">
+                <h3 className="text-[12px] font-semibold tracking-tight text-brand-cloud">{client.name}</h3>
+                <p className="mt-0.5 text-[9px] uppercase tracking-[0.15em] text-brand-cloud/40">Reco Pilot</p>
+              </div>
+              <div
+                ref={chatScrollRef}
+                className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain px-4 py-3 scroll-smooth [-webkit-overflow-scrolling:touch]"
+                tabIndex={0}
+                aria-label={`Sample conversation for ${client.name}`}
+              >
+                {turns.map((turn, idx) =>
+                  turn.role === 'user' ? (
+                    <div key={idx} className="flex justify-end">
+                      <div className="max-w-[90%] rounded-2xl rounded-br-sm bg-brand-mint px-3 py-2 text-[11px] font-medium leading-relaxed text-brand-navy">
+                        {turn.text}
+                      </div>
                     </div>
-                  ))}
+                  ) : (
+                    <div key={idx} className="flex justify-start">
+                      <div className="mr-1.5 mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg border border-white/10 bg-gradient-to-br from-brand-navy to-brand-slate text-[9px] font-semibold tracking-tight text-brand-cloud">
+                        R
+                      </div>
+                      <div className="min-w-0 max-w-[92%] rounded-2xl rounded-bl-sm border border-white/10 bg-white/[0.03] px-3 py-2 text-brand-cloud/90 backdrop-blur-sm">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={previewAssistantMarkdownComponents}>
+                          {normalizeChatMarkdown(turn.text)}
+                        </ReactMarkdown>
+                      </div>
+                    </div>
+                  ),
+                )}
+                <p className="pb-1 text-center text-[9px] text-brand-cloud/35">Scroll for more · sample only</p>
+              </div>
+              <div className="shrink-0 border-t border-white/5 bg-black/20 px-3 py-2">
+                <div className="flex items-end gap-1.5 rounded-lg border border-white/10 bg-white/[0.04] px-2 py-1.5 backdrop-blur-sm">
+                  <div className="flex-1 py-0.5 text-[10px] text-brand-cloud/35">Ask Reco about this client…</div>
+                  <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-brand-mint/50" aria-hidden>
+                    <svg className="h-3 w-3 rotate-90 text-brand-navy/60" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M2 21l21-9L2 3v7l15 2-15 2v7z" />
+                    </svg>
+                  </div>
                 </div>
               </div>
+            </div>
 
-              <button type="button" className="mt-4 mb-1 flex w-full items-center justify-between group" tabIndex={-1}>
-                <span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-brand-cloud/55">Email sync</span>
-                <span className="text-[10px] text-brand-cloud/35">▲</span>
-              </button>
-              <p className="mb-2 rounded border border-white/5 bg-white/[0.02] px-2 py-1.5 text-[9px] leading-snug text-brand-cloud/50">
-                Threads involving <span className="text-brand-cloud/75">{client.gmailLine}</span> are indexed into this
-                workspace.
-              </p>
-              <ul className="space-y-1.5">
-                {client.emailThreads.map(t => (
-                  <li
-                    key={t.subject}
-                    className="rounded border border-white/8 bg-black/25 px-2 py-1.5 text-[9px] text-brand-cloud/60"
-                  >
-                    <p className="font-medium text-brand-mint/90 line-clamp-2">{t.subject}</p>
-                    <p className="mt-0.5 line-clamp-2 text-brand-cloud/45">{t.preview}</p>
-                  </li>
-                ))}
-              </ul>
+            <div
+              id={PREVIEW_PANEL_SOURCES_ID}
+              role="tabpanel"
+              aria-labelledby={PREVIEW_TAB_SOURCES_ID}
+              className={`min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-x border-white/5 bg-black/20 backdrop-blur-sm md:hidden ${mobilePane === 'sources' ? 'flex' : 'hidden'}`}
+            >
+              <PreviewContextPanel client={client} />
+            </div>
 
-              <button type="button" className="mt-4 mb-1 flex w-full items-center justify-between group" tabIndex={-1}>
-                <span className="text-[9px] font-semibold uppercase tracking-[0.15em] text-brand-cloud/55">Documents</span>
-                <span className="text-[10px] text-brand-cloud/35">▲</span>
-              </button>
-              <ul className="space-y-1">
-                {client.documents.map(doc => (
-                  <li
-                    key={doc}
-                    className="truncate rounded border border-white/5 px-1.5 py-1 font-mono text-[9px] text-brand-cloud/65"
-                  >
-                    {doc}
-                  </li>
-                ))}
-              </ul>
+            <div className="hidden w-[min(40%,252px)] shrink-0 flex-col border-l border-white/5 bg-black/20 backdrop-blur-sm md:flex">
+              <PreviewContextPanel client={client} />
             </div>
           </div>
         </div>
@@ -919,9 +1015,10 @@ export default function LandingAppPreview() {
         >
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-brand-cloud/45">Why it feels grounded</p>
           <p className="text-[11px] leading-relaxed text-brand-cloud/60">
-            Reco builds prompts from the same objects you see in the right rail: message subjects from synced email, file names from
-            folder sync and uploads, plus deal dates. The assistant is nudged to <strong className="text-brand-cloud/80">name those sources</strong> when it reasons — so you can
-            verify fast.
+            Reco builds prompts from the same objects you see in the workspace — message subjects from synced email, file names from
+            folder sync and uploads, plus deal dates. In this preview, open the <strong className="text-brand-cloud/80">Sources</strong> tab on
+            small screens or use the <strong className="text-brand-cloud/80">right rail</strong> on wider layouts. The assistant is nudged to{' '}
+            <strong className="text-brand-cloud/80">name those sources</strong> when it reasons so you can verify fast.
           </p>
         </div>
         <div
@@ -931,8 +1028,10 @@ export default function LandingAppPreview() {
         >
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.15em] text-brand-cloud/45">Try it here</p>
           <p className="text-[11px] leading-relaxed text-brand-cloud/60">
-            Click another client in the sidebar — each has a longer sample thread you can <strong className="text-brand-cloud/80">scroll inside the chat pane</strong>. On
-            smaller screens the context column hides; widen the window to see email and documents alongside the thread.
+            Pick another client from the <strong className="text-brand-cloud/80">sidebar</strong> (desktop) or the{' '}
+            <strong className="text-brand-cloud/80">client row</strong> under Chat (mobile) — each has a longer sample thread you can{' '}
+            <strong className="text-brand-cloud/80">scroll inside the chat pane</strong>. On mobile, use the <strong className="text-brand-cloud/80">Sources</strong> tab to
+            see synced email and documents for the selected client.
           </p>
         </div>
         <div
