@@ -90,6 +90,16 @@ export const getMessages = (projectId: string) =>
   req<ChatMessage[]>(`/projects/${projectId}/messages`)
 export const clearMessages = (projectId: string) =>
   req<void>(`/projects/${projectId}/messages`, { method: 'DELETE' })
+
+// RealEstateAPI BFF (key stays on server)
+export const getPropertyAutocomplete = (q: string) =>
+  req<Record<string, unknown>>(
+    `/property-data/autocomplete?q=${encodeURIComponent((q || '').trim())}`,
+  )
+/** BFF for vendor CSV Builder — not exposed in the UI; available if you add a plan that includes that product. */
+export type ReapiExportPayload = { kind: 'search' | 'comps'; export_ids: number[]; map: string[] }
+export const postPropertyDataCsv = (data: { file_name: string; map: string[]; ids: number[] }) =>
+  req<Record<string, unknown>>('/property-data/csv', { method: 'POST', body: JSON.stringify(data) })
 // Backend returns 400 until gmail.compose is re-enabled (see backend/config.GOOGLE_SCOPES).
 export const draftEmail = (projectId: string, data: { to: string; subject: string; body: string }) =>
   req<{ draft_url: string }>(`/projects/${projectId}/chat/draft-email`, { method: 'POST', body: JSON.stringify(data) })

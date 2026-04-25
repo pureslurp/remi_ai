@@ -15,6 +15,7 @@ from config import (
     BUDGET_HISTORY_MESSAGES,
     BUDGET_PROFILE,
     BUDGET_TRANSACTION,
+    REAPI_ACTIVE,
 )
 
 
@@ -234,4 +235,9 @@ def list_llm_options_for_tier(tier: str) -> dict[str, Any]:
     dp = DEFAULT_LLM_PROVIDER if DEFAULT_LLM_PROVIDER in MODEL_ALLOWLIST else "anthropic"
     if not provider_key_configured(dp) or not models_for_subscription_tier(tier_l, dp):
         dp = providers[0]["id"] if providers else dp
-    return {"providers": providers, "default_provider": dp, "subscription_tier": tier_l}
+    return {
+        "providers": providers,
+        "default_provider": dp,
+        "subscription_tier": tier_l,
+        "property_data_enabled": REAPI_ACTIVE,
+    }

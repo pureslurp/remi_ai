@@ -20,6 +20,7 @@ class Property(Base):
     sqft = Column(Integer)
     status = Column(String, default="active")  # active|pending|contingent|closed|dead
     notes = Column(Text)
+    reapi_property_id = Column(String, nullable=True)  # RealEstateAPI / vendor property id
 
     project = relationship("Project", back_populates="properties", foreign_keys="[Property.project_id]")
     transactions = relationship("Transaction", back_populates="property", cascade="all, delete-orphan")

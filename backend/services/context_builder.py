@@ -257,8 +257,9 @@ def build_context_system(
     doc_section: str = "",
     email_section: str = "",
     conv_summary: str | None = None,
+    property_public_section: str = "",
 ) -> list[dict[str, Any]]:
-    """Assemble system blocks (persona, profile, tx, optional summary, doc, email)."""
+    """Assemble system blocks (persona, profile, tx, optional public property, summary, doc, email)."""
     today = datetime.now().strftime("%B %d, %Y")
     strategy = resolve_strategy_prompt(project, account)
     persona_block = (
@@ -283,10 +284,21 @@ def build_context_system(
             "cache_control": {"type": "ephemeral"},
         },
     ]
+    if (property_public_section or "").strip():
+        # No cache_control: Anthropic allows at most 4 cached blocks; profile, transactions,
+        # documents, and emails keep cache. Public property (incl. /search /comps injects) varies
+        # per turn, so it is a plain block.
+        extra.append(
+            {
+                "type": "text",
+                "text": "--- PUBLIC PROPERTY DATA (RealEstateAPI — not MLS) ---\n"
+                + (property_public_section or "").strip(),
+            }
+        )
     if (conv_summary or "").strip():
         # No cache_control here: Anthropic caps breakpoints at 4, and this block
         # turns over every SUMMARY_TRIGGER_COUNT messages so it has the weakest
-        # cache value among the five system chunks.
+        # cache value among the system chunks.
         extra.append(
             {
                 "type": "text",

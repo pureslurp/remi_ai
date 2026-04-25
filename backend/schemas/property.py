@@ -7,6 +7,7 @@ class PropertyCreate(BaseModel):
     city: Optional[str] = None
     state: str = "MI"
     zip_code: Optional[str] = None
+    reapi_property_id: Optional[str] = None
     mls_number: Optional[str] = None
     list_price: Optional[float] = None
     beds: Optional[int] = None
@@ -21,6 +22,7 @@ class PropertyUpdate(BaseModel):
     city: Optional[str] = None
     state: Optional[str] = None
     zip_code: Optional[str] = None
+    reapi_property_id: Optional[str] = None
     mls_number: Optional[str] = None
     list_price: Optional[float] = None
     beds: Optional[int] = None
@@ -37,6 +39,7 @@ class PropertyOut(BaseModel):
     city: Optional[str]
     state: Optional[str]
     zip_code: Optional[str]
+    reapi_property_id: Optional[str] = None
     mls_number: Optional[str]
     list_price: Optional[float]
     beds: Optional[int]
