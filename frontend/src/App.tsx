@@ -15,7 +15,8 @@ const LS_SIDEBAR = 'reco.layout.sidebarWidth'
 const LS_RIGHT = 'reco.layout.rightPanelWidth'
 const LS_SIDEBAR_MODE = 'reco.layout.sidebarMode'
 
-const SIDEBAR = { min: 200, max: 440, def: 280 } as const
+/** Min must fit header row: mark + "reco-pilot" (wordmark) + shell controls. */
+const SIDEBAR = { min: 300, max: 440, def: 320 } as const
 const SIDEBAR_RAIL = 52
 const RIGHT_PANEL = { min: 260, max: 560, def: 420 } as const
 
