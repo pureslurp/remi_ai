@@ -531,6 +531,21 @@ export default function LandingPage({ needsDeviceLink, onEmailAuth }: Props) {
           </aside>
         </section>
 
+        <section
+          className="landing-rise mt-16 border-y border-white/[0.06] bg-white/[0.02] py-10 sm:mt-20 sm:py-12"
+          style={{ animationDelay: '260ms' }}
+          aria-label="Why AI literacy matters for agents"
+        >
+          <blockquote className="mx-auto max-w-3xl space-y-0.5 px-1 text-center sm:space-y-1">
+            <p className="font-landing-sans text-lg font-medium leading-snug text-brand-cloud/85 sm:text-xl md:text-2xl md:leading-snug">
+              AI won&apos;t replace real estate agents,
+            </p>
+            <p className="font-landing-sans text-lg font-medium leading-snug text-brand-cloud/85 sm:text-xl md:text-2xl md:leading-snug">
+              it will replace agents who don&apos;t learn to use it.
+            </p>
+          </blockquote>
+        </section>
+
         <section className="mt-24 sm:mt-28" aria-labelledby="features-heading">
           <div className="mb-10 max-w-2xl">
             <h2 id="features-heading" className="font-landing-display text-3xl font-semibold tracking-tight text-brand-cloud sm:text-4xl">
