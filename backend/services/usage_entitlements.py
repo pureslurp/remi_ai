@@ -161,6 +161,18 @@ def is_admin(account: "Account") -> bool:
     return bool(email and email in ADMIN_EMAILS)
 
 
+def llm_allowlist_tier(account: "Account" | None) -> str:
+    """Tier used for model picker and /chat allowlist checks.
+
+    Admin accounts get the same frontier allowlist as Ultra regardless of billing tier.
+    """
+    if account is not None and is_admin(account):
+        return "ultra"
+    if account is None:
+        return "free"
+    return subscription_tier(account)
+
+
 def assert_chat_allowed(account: "Account", db: Session, estimated_additional_tokens: int) -> None:
     """
     Raises HTTPException if this request would exceed the account budget (pre-flight).

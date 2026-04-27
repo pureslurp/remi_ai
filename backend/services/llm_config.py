@@ -24,7 +24,8 @@ def _uniq(*items: str) -> tuple[str, ...]:
 
 
 MODEL_ALLOWLIST: dict[str, tuple[str, ...]] = {
-    "anthropic": _uniq(ANTHROPIC_MODEL, "claude-haiku-4-5-20251001"),
+    # Max/Ultra (and admins): Sonnet first so defaults, coerce fallbacks, and UI "first model" stay Sonnet.
+    "anthropic": _uniq(ANTHROPIC_MODEL, "claude-opus-4-7", "claude-haiku-4-5-20251001"),
     "openai": _uniq(OPENAI_CHAT_MODEL, "gpt-4o-mini", "gpt-4o", "gpt-4.1-mini"),
     "gemini": _uniq(GEMINI_CHAT_MODEL, "gemini-2.0-flash", "gemini-1.5-flash"),
 }
@@ -117,7 +118,7 @@ def list_llm_options() -> dict[str, Any]:
     for pid in ("anthropic", "openai", "gemini"):
         if not provider_key_configured(pid):
             continue
-        models = [{"id": m, "label": m} for m in MODEL_ALLOWLIST[pid]]
+        models = [{"id": m, "label": llm_model_select_label(pid, m)} for m in MODEL_ALLOWLIST[pid]]
         providers.append({"id": pid, "label": labels[pid], "models": models})
     dp = DEFAULT_LLM_PROVIDER if DEFAULT_LLM_PROVIDER in MODEL_ALLOWLIST else "anthropic"
     if not provider_key_configured(dp):
@@ -128,6 +129,28 @@ def list_llm_options() -> dict[str, Any]:
 def model_display_name(provider: str, model: str) -> str:
     """Short label for errors / logs."""
     return f"{model} ({provider})"
+
+
+def llm_model_select_label(provider: str, model_id: str) -> str:
+    """Human label for `<select>` options: raw model id + usage band suffix."""
+    m = (model_id or "").strip()
+    p = (provider or "").strip().lower()
+    low = m.lower()
+
+    if "opus" in low:
+        band = "Higher usage"
+    elif p == "openai" and low == "gpt-4o":
+        band = "Higher usage"
+    elif "haiku" in low:
+        band = "Lower usage"
+    elif p == "openai" and ("mini" in low or "gpt-4.1-mini" in low):
+        band = "Lower usage"
+    elif p == "gemini" and "1.5" in low:
+        band = "Lower usage"
+    else:
+        band = "Balanced"
+
+    return f"{m} — {band}"
 
 
 # --- Tier allowlists ---
@@ -230,7 +253,7 @@ def list_llm_options_for_tier(tier: str) -> dict[str, Any]:
         allowed = models_for_subscription_tier(tier_l, pid)
         if not allowed:
             continue
-        models = [{"id": m, "label": m} for m in allowed]
+        models = [{"id": m, "label": llm_model_select_label(pid, m)} for m in allowed]
         providers.append({"id": pid, "label": labels[pid], "models": models})
     dp = DEFAULT_LLM_PROVIDER if DEFAULT_LLM_PROVIDER in MODEL_ALLOWLIST else "anthropic"
     if not provider_key_configured(dp) or not models_for_subscription_tier(tier_l, dp):

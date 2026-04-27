@@ -59,7 +59,7 @@ from services.usage_entitlements import (
     assert_chat_allowed,
     increment_usage_after_chat_completion,
     is_admin,
-    subscription_tier,
+    llm_allowlist_tier,
 )
 
 logger = logging.getLogger("reco")
@@ -150,7 +150,7 @@ async def chat(project: ProjectForUser, body: ChatRequest, request: Request, db:
             "OPENAI_API_KEY and/or GEMINI_API_KEY (or GOOGLE_API_KEY) in the host environment.",
         )
 
-    tier = subscription_tier(account)
+    tier = llm_allowlist_tier(account)
     provider, model = coerce_llm_for_tier(
         tier,
         getattr(project, "llm_provider", None),
