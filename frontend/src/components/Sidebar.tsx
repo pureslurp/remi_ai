@@ -224,6 +224,18 @@ function IconTrash({ className }: { className?: string }) {
   )
 }
 
+function IconBookOpen({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253"
+      />
+    </svg>
+  )
+}
+
 export type SidebarShell = 'expanded' | 'collapsed'
 
 type SidebarProps = {
@@ -350,6 +362,14 @@ export default function Sidebar({
           </button>
         )}
 
+        <a
+          href="/guide"
+          title="How to use reco-pilot"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-brand-cloud/50 transition hover:bg-white/[0.06] hover:text-brand-cloud/85"
+        >
+          <IconBookOpen className="h-4 w-4" />
+        </a>
+
         <UserProfile compact />
 
         {modal}
@@ -460,6 +480,16 @@ export default function Sidebar({
       </div>
 
       {modal}
+
+      <div className="shrink-0 border-t border-white/5 px-2 pt-1.5 pb-0.5">
+        <a
+          href="/guide"
+          className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left text-sm text-brand-cloud/65 transition hover:bg-white/[0.04] hover:text-brand-cloud/90"
+        >
+          <IconBookOpen className="h-4 w-4 shrink-0 text-brand-cloud/45" aria-hidden />
+          <span>How to use</span>
+        </a>
+      </div>
 
       <UserProfile />
     </div>

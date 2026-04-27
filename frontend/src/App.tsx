@@ -5,6 +5,7 @@ import Sidebar from './components/Sidebar'
 import ChatPanel from './components/ChatPanel'
 import ClientSettings from './components/ClientSettings'
 import LandingPage from './components/LandingPage'
+import HowToGuide from './components/HowToGuide'
 import PrivacyPolicy from './components/PrivacyPolicy'
 import TermsOfService from './components/TermsOfService'
 import ResizableDivider from './components/ResizableDivider'
@@ -258,6 +259,10 @@ export default function App() {
 
   if (!sessionUnlocked) {
     return <LandingPage onEmailAuth={bootstrap} />
+  }
+
+  if (window.location.pathname === '/guide') {
+    return <HowToGuide />
   }
 
   return (

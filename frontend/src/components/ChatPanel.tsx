@@ -81,7 +81,7 @@ function usageFooterCaption(e: AccountEntitlements): UsageFooter | null {
 export default function ChatPanel({ project, onProjectUpdated }: Props) {
   const projectId = project.id
   const projectName = project.name
-  const { messages, isStreaming, streamingContent, setMessages, documents } = useAppStore()
+  const { messages, isStreaming, streamingContent, documents } = useAppStore()
   const { sendMessage, cancelStream } = useChat(projectId)
   const [input, setInput] = useState('')
   const [llmOpts, setLlmOpts] = useState<LlmOptionsResponse | null>(null)
@@ -270,18 +270,6 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
     refreshEntitlements()
   }
 
-  const startNewSession = async () => {
-    if (isStreaming || !canSendChat) return
-    if (messages.length === 0) return
-    if (!window.confirm('Start a new session? This clears the chat for this client (no undo).')) return
-    try {
-      await api.clearMessages(projectId)
-      setMessages([])
-    } catch {
-      /* error toast could go here */
-    }
-  }
-
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Escape' && mentionOpen) {
       e.preventDefault()
@@ -330,17 +318,6 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
             <h2 className="font-semibold text-brand-cloud tracking-tight">{projectName}</h2>
             <p className="font-wordmark-app text-[11px] font-medium tracking-[0.08em] text-brand-cloud/40 mt-0.5">reco-pilot</p>
           </div>
-          {messages.length > 0 && (
-            <button
-              type="button"
-              onClick={() => void startNewSession()}
-              disabled={isStreaming || !canSendChat}
-              className="shrink-0 text-[10px] px-2 py-1 rounded-md border border-white/15 text-brand-cloud/55 hover:text-brand-cloud/80 hover:border-white/25 transition disabled:opacity-40"
-              title="Clear chat and start a new session"
-            >
-              New session
-            </button>
-          )}
         </div>
         {entitlements && !entitlements.can_send_chat && (
           <p className="mt-2 text-[11px] text-amber-200/90 leading-relaxed">
