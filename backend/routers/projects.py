@@ -12,7 +12,7 @@ from models import Account, Document, Project, Property
 from schemas.project import ProjectCreate, ProjectUpdate, ProjectOut
 from services import object_storage
 from services.llm_config import normalize_project_llm_for_account
-from services.usage_entitlements import subscription_tier
+from services.usage_entitlements import llm_allowlist_tier, subscription_tier
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -69,11 +69,10 @@ def update_project(
 ):
     data = body.model_dump(exclude_unset=True)
     acc = db.get(Account, account_id)
-    tier = subscription_tier(acc) if acc else "trial"
     if "llm_provider" in data or "llm_model" in data:
         lp = data.get("llm_provider", project.llm_provider)
         lm = data.get("llm_model", project.llm_model)
-        np, nm = normalize_project_llm_for_account(lp, lm, tier)
+        np, nm = normalize_project_llm_for_account(lp, lm, llm_allowlist_tier(acc))
         data["llm_provider"] = np
         data["llm_model"] = nm
     if "sale_property_id" in data:
