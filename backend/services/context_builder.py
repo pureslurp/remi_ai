@@ -262,11 +262,19 @@ def build_context_system(
     """Assemble system blocks (persona, profile, tx, optional public property, summary, doc, email)."""
     today = datetime.now().strftime("%B %d, %Y")
     strategy = resolve_strategy_prompt(project, account)
+    calendar_anchor = (
+        f"Today's date: {today}. "
+        "Use this as the authoritative calendar anchor for this conversation. "
+        "Relative wording in drafts, emails, or pasted text (e.g. \"tomorrow,\" \"tonight,\" weekdays) may be stale or written for another timezone—resolve those phrases against Today's date above, and say so when you are translating relative language to a specific calendar day. "
+        "If the agent corrects a date or timing detail, defer to their correction; do not invent a different \"today\" to agree with them. "
+        "Prior turns below may be prefixed with [Sent YYYY-MM-DD HH:MM UTC] — that is when each message was stored (server time), not necessarily when the agent typed it; use it to tell yesterday's chat from today's."
+    )
     persona_block = (
         BASE_PERSONA
         + "\n\n--- ROLE-SPECIFIC GUIDANCE ---\n"
         + strategy
-        + f"\n\nToday's date: {today}."
+        + "\n\n"
+        + calendar_anchor
     )
     extra: list[dict[str, Any]] = [
         {
@@ -333,6 +341,16 @@ def build_system_prompt(project: Project, account: Account | None = None) -> lis
     )
 
 
+def _chat_content_for_llm(m: ChatMessage) -> str:
+    """Include stored time so the model can place prior turns relative to Today's date."""
+    ts = m.created_at
+    if ts is None:
+        return m.content
+    # created_at defaults to datetime.utcnow — naive UTC
+    stamp = ts.strftime("%Y-%m-%d %H:%M UTC")
+    return f"[Sent {stamp}]\n{m.content}"
+
+
 def load_history(project: Project, db: Session) -> list[dict]:
     messages = (
         db.query(ChatMessage)
@@ -341,4 +359,4 @@ def load_history(project: Project, db: Session) -> list[dict]:
         .limit(BUDGET_HISTORY_MESSAGES)
         .all()
     )
-    return [{"role": m.role, "content": m.content} for m in reversed(messages)]
+    return [{"role": m.role, "content": _chat_content_for_llm(m)} for m in reversed(messages)]
