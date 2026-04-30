@@ -10,6 +10,7 @@ import PrivacyPolicy from './components/PrivacyPolicy'
 import TermsOfService from './components/TermsOfService'
 import ResizableDivider from './components/ResizableDivider'
 import { useProjectData } from './hooks/useProject'
+import { useIsLgUp } from './hooks/useIsLgUp'
 import type { Project } from './types'
 
 const LS_SIDEBAR = 'reco.layout.sidebarWidth'
@@ -228,6 +229,32 @@ export default function App() {
     setProjects(projects.map(p => (p.id === updated.id ? updated : p)))
   }
 
+  const isLgUp = useIsLgUp()
+  const [mobileClientListOpen, setMobileClientListOpen] = useState(false)
+  const [mobileClientDetailOpen, setMobileClientDetailOpen] = useState(false)
+
+  useEffect(() => {
+    if (isLgUp) {
+      setMobileClientListOpen(false)
+      setMobileClientDetailOpen(false)
+    }
+  }, [isLgUp])
+
+  useEffect(() => {
+    if (!mobileClientListOpen && !mobileClientDetailOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setMobileClientDetailOpen(false)
+        setMobileClientListOpen(false)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [mobileClientListOpen, mobileClientDetailOpen])
+
+  const closeMobileClientList = useCallback(() => setMobileClientListOpen(false), [])
+  const closeMobileClientDetail = useCallback(() => setMobileClientDetailOpen(false), [])
+
   if (!authReady) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center gap-4">
@@ -268,7 +295,7 @@ export default function App() {
   return (
     <div className="flex flex-col h-screen reco-fade-in">
       {showGoogleBanner && (
-        <div className="flex items-center justify-between gap-3 border-b border-amber-400/20 bg-amber-500/[0.07] px-4 py-2.5 text-sm text-amber-100/90">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 border-b border-amber-400/20 bg-amber-500/[0.07] px-4 py-2.5 text-sm text-amber-100/90">
           <p>
             Connect your Google account to enable email sync and Drive document import.{' '}
             <button
@@ -292,7 +319,7 @@ export default function App() {
         </div>
       )}
 
-      {sidebarMode === 'hidden' && (
+      {isLgUp && sidebarMode === 'hidden' && (
         <button
           type="button"
           aria-label="Show clients sidebar"
@@ -307,7 +334,7 @@ export default function App() {
       )}
 
       <div className="flex flex-1 min-h-0 overflow-hidden">
-        {sidebarMode !== 'hidden' && (
+        {isLgUp && sidebarMode !== 'hidden' && (
           <>
             <div
               className="shrink-0 min-h-0 min-w-0 flex flex-col"
@@ -329,39 +356,133 @@ export default function App() {
 
         {activeProject ? (
           <>
-            <div className="flex-1 min-w-[260px] min-h-0 flex flex-col overflow-hidden border-x border-white/5">
-              <ChatPanel project={activeProject} onProjectUpdated={handleProjectUpdated} />
+            <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden border-white/5 lg:border-x lg:min-w-[260px]">
+              <ChatPanel
+                project={activeProject}
+                onProjectUpdated={handleProjectUpdated}
+                mobileNav={
+                  isLgUp
+                    ? undefined
+                    : {
+                        onOpenClients: () => setMobileClientListOpen(true),
+                        onOpenClientDetails: () => setMobileClientDetailOpen(true),
+                      }
+                }
+              />
             </div>
 
-            <ResizableDivider onDrag={onRightPanelDrag} onDragEnd={persistLayout} />
+            {isLgUp && (
+              <>
+                <ResizableDivider onDrag={onRightPanelDrag} onDragEnd={persistLayout} />
 
-            <div
-              className="shrink-0 min-h-0 min-w-0 flex flex-col bg-black/20 backdrop-blur-sm border-l border-white/5"
-              style={{ width: rightPanelWidth }}
-            >
-              <ClientSettings project={activeProject} onProjectUpdated={handleProjectUpdated} />
-            </div>
+                <div
+                  className="shrink-0 min-h-0 min-w-0 flex flex-col bg-black/20 backdrop-blur-sm border-l border-white/5"
+                  style={{ width: rightPanelWidth }}
+                >
+                  <ClientSettings project={activeProject} onProjectUpdated={handleProjectUpdated} />
+                </div>
+              </>
+            )}
           </>
         ) : (
-          <div className="flex-1 min-w-[240px] min-h-0 flex items-center justify-center overflow-auto">
-            <div className="text-center px-6">
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center text-2xl font-semibold mx-auto mb-5 text-brand-cloud tracking-tight font-landing-display">
-                r.
-              </div>
-              <h2 className="text-xl font-semibold text-brand-cloud mb-1 tracking-tight">
-                Welcome to{' '}
-                <span className="font-wordmark-app tracking-[0.06em]">reco-pilot</span>
-              </h2>
-              <p className="text-brand-cloud/60 text-sm">Create your first client in the sidebar to get started.</p>
-              {sidebarMode === 'hidden' && (
-                <p className="text-brand-cloud/40 text-xs mt-3 max-w-sm mx-auto">
-                  Sidebar is hidden — use the tab on the left screen edge to open clients and add one.
+          <div className="flex-1 min-w-0 min-h-0 flex flex-col overflow-hidden lg:min-w-[240px]">
+            <div className="flex-1 flex items-center justify-center overflow-auto p-6">
+              <div className="text-center max-w-md">
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-brand-navy to-brand-slate border border-white/10 flex items-center justify-center text-2xl font-semibold mx-auto mb-5 text-brand-cloud tracking-tight font-landing-display">
+                  r.
+                </div>
+                <h2 className="text-xl font-semibold text-brand-cloud mb-1 tracking-tight">
+                  Welcome to{' '}
+                  <span className="font-wordmark-app tracking-[0.06em]">reco-pilot</span>
+                </h2>
+                <p className="text-brand-cloud/60 text-sm">
+                  {isLgUp
+                    ? 'Create your first client in the sidebar to get started.'
+                    : 'Create your first client from the client list.'}
                 </p>
-              )}
+                {!isLgUp && (
+                  <button
+                    type="button"
+                    onClick={() => setMobileClientListOpen(true)}
+                    className="mt-5 w-full max-w-xs mx-auto py-2.5 rounded-lg text-sm font-medium text-brand-navy bg-brand-mint hover:bg-brand-mint/90 transition"
+                  >
+                    Open clients
+                  </button>
+                )}
+                {isLgUp && sidebarMode === 'hidden' && (
+                  <p className="text-brand-cloud/40 text-xs mt-3 max-w-sm mx-auto">
+                    Sidebar is hidden — use the tab on the left screen edge to open clients and add one.
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         )}
       </div>
+
+      {!isLgUp && mobileClientListOpen && (
+        <div className="fixed inset-0 z-[60] flex lg:hidden" role="dialog" aria-modal="true" aria-label="Clients">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            aria-label="Close client list"
+            onClick={closeMobileClientList}
+          />
+          <div className="relative flex h-full w-[min(20rem,92vw)] flex-col border-r border-white/10 bg-zinc-950/95 shadow-2xl">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))]">
+              <span className="text-sm font-semibold text-brand-cloud">Clients</span>
+              <button
+                type="button"
+                onClick={closeMobileClientList}
+                className="rounded-lg p-2 text-brand-cloud/60 hover:bg-white/[0.08] hover:text-brand-cloud transition"
+                aria-label="Close"
+              >
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-hidden">
+              <Sidebar
+                shell="expanded"
+                omitShellControls
+                onAfterSelectClient={closeMobileClientList}
+              />
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!isLgUp && mobileClientDetailOpen && activeProject && (
+        <div className="fixed inset-0 z-[60] flex justify-end lg:hidden" role="dialog" aria-modal="true" aria-label="Client workspace">
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/60 backdrop-blur-sm"
+            aria-label="Close client workspace"
+            onClick={closeMobileClientDetail}
+          />
+          <div className="relative flex h-full w-[min(100vw,24rem)] flex-col border-l border-white/10 bg-zinc-950/95 shadow-2xl pb-[max(0.5rem,env(safe-area-inset-bottom))]">
+            <div className="flex shrink-0 items-center justify-between gap-2 border-b border-white/10 px-3 py-2.5 pt-[max(0.625rem,env(safe-area-inset-top))]">
+              <span className="min-w-0 truncate text-sm font-semibold text-brand-cloud" title={activeProject.name}>
+                {activeProject.name}
+              </span>
+              <button
+                type="button"
+                onClick={closeMobileClientDetail}
+                className="shrink-0 rounded-lg p-2 text-brand-cloud/60 hover:bg-white/[0.08] hover:text-brand-cloud transition"
+                aria-label="Close"
+              >
+                <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+              <ClientSettings project={activeProject} onProjectUpdated={handleProjectUpdated} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

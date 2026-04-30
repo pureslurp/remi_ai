@@ -243,6 +243,10 @@ type SidebarProps = {
   onExpandShell?: () => void
   onCollapseToRail?: () => void
   onHideShell?: () => void
+  /** When true, hide minimize/hide sidebar chrome (e.g. mobile drawer). */
+  omitShellControls?: boolean
+  /** Called after the user picks a client (including after creating one). */
+  onAfterSelectClient?: () => void
 }
 
 export default function Sidebar({
@@ -250,6 +254,8 @@ export default function Sidebar({
   onExpandShell,
   onCollapseToRail,
   onHideShell,
+  omitShellControls = false,
+  onAfterSelectClient,
 }: SidebarProps) {
   const { projects, activeProjectId, setProjects, setActiveProject } = useAppStore()
   const [showModal, setShowModal] = useState(false)
@@ -283,6 +289,7 @@ export default function Sidebar({
     setProjects([project, ...projects])
     setActiveProject(project.id)
     setShowModal(false)
+    onAfterSelectClient?.()
   }
 
   const modal = showModal ? (
@@ -325,7 +332,10 @@ export default function Sidebar({
                   type="button"
                   title={p.name}
                   disabled={busy}
-                  onClick={() => setActiveProject(p.id)}
+                  onClick={() => {
+                    setActiveProject(p.id)
+                    onAfterSelectClient?.()
+                  }}
                   className={`absolute inset-0 flex items-center justify-center rounded-xl text-[11px] font-semibold tracking-tight transition border ${
                     isActive
                       ? 'bg-brand-mint/20 border-brand-mint text-brand-cloud ring-1 ring-brand-mint/50'
@@ -387,28 +397,30 @@ export default function Sidebar({
             </div>
             <h1 className="font-wordmark-app text-xl font-semibold text-brand-cloud tracking-[0.06em] truncate">reco-pilot</h1>
           </div>
-          <div className="flex shrink-0 gap-0.5">
-            {onCollapseToRail && (
-              <button
-                type="button"
-                onClick={onCollapseToRail}
-                title="Minimize to slim strip"
-                className="p-1.5 rounded-lg text-brand-cloud/45 hover:text-brand-cloud hover:bg-white/[0.06] transition"
-              >
-                <IconChevronLeft className="w-4 h-4" />
-              </button>
-            )}
-            {onHideShell && (
-              <button
-                type="button"
-                onClick={onHideShell}
-                title="Hide sidebar completely"
-                className="p-1.5 rounded-lg text-brand-cloud/45 hover:text-brand-cloud hover:bg-white/[0.06] transition"
-              >
-                <IconPanelOff className="w-4 h-4" />
-              </button>
-            )}
-          </div>
+          {!omitShellControls && (
+            <div className="flex shrink-0 gap-0.5">
+              {onCollapseToRail && (
+                <button
+                  type="button"
+                  onClick={onCollapseToRail}
+                  title="Minimize to slim strip"
+                  className="p-1.5 rounded-lg text-brand-cloud/45 hover:text-brand-cloud hover:bg-white/[0.06] transition"
+                >
+                  <IconChevronLeft className="w-4 h-4" />
+                </button>
+              )}
+              {onHideShell && (
+                <button
+                  type="button"
+                  onClick={onHideShell}
+                  title="Hide sidebar completely"
+                  className="p-1.5 rounded-lg text-brand-cloud/45 hover:text-brand-cloud hover:bg-white/[0.06] transition"
+                >
+                  <IconPanelOff className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          )}
         </div>
         <button
           onClick={() => setShowModal(true)}
@@ -437,7 +449,10 @@ export default function Sidebar({
               <button
                 type="button"
                 disabled={busy}
-                onClick={() => setActiveProject(p.id)}
+                onClick={() => {
+                  setActiveProject(p.id)
+                  onAfterSelectClient?.()
+                }}
                 className="min-w-0 flex-1 px-4 py-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand-mint/35 disabled:opacity-40"
               >
                 <div className="min-w-0">

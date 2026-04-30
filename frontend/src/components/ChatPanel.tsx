@@ -7,9 +7,16 @@ import UpgradePlanModal from './UpgradePlanModal'
 import ManageBillingModal from './ManageBillingModal'
 import type { AccountEntitlements, ChatMessage, Document, LlmOptionsResponse, Project } from '../types'
 
+export type ChatPanelMobileNav = {
+  onOpenClients: () => void
+  onOpenClientDetails: () => void
+}
+
 interface Props {
   project: Pick<Project, 'id' | 'name' | 'llm_provider' | 'llm_model'>
   onProjectUpdated: (p: Project) => void
+  /** Narrow viewports: header controls to open client list and workspace panel. */
+  mobileNav?: ChatPanelMobileNav
 }
 
 /** Fraction of included allowance used (0–1), or null for admins / invalid caps. */
@@ -78,7 +85,27 @@ function usageFooterCaption(e: AccountEntitlements): UsageFooter | null {
   return null
 }
 
-export default function ChatPanel({ project, onProjectUpdated }: Props) {
+function IconMenu({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path strokeLinecap="round" d="M4 7h16M4 12h16M4 17h16" />
+    </svg>
+  )
+}
+
+function IconSliders({ className }: { className?: string }) {
+  return (
+    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+      <path
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M4 21v-7m0-4V3m8 18v-9m0-4V3m8 18v-5m0-4V3M1 14h6m4-5h6m4 9h6"
+      />
+    </svg>
+  )
+}
+
+export default function ChatPanel({ project, onProjectUpdated, mobileNav }: Props) {
   const projectId = project.id
   const projectName = project.name
   const { messages, isStreaming, streamingContent, documents } = useAppStore()
@@ -312,12 +339,36 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
   return (
     <>
     <div className="flex flex-col h-full">
-      <div className="px-6 py-4 border-b border-white/5 bg-black/20">
+      <div className="px-3 py-3 sm:px-6 sm:py-4 border-b border-white/5 bg-black/20 pt-[max(0.75rem,env(safe-area-inset-top))] sm:pt-4">
         <div className="flex items-start justify-between gap-2">
-          <div>
-            <h2 className="font-semibold text-brand-cloud tracking-tight">{projectName}</h2>
-            <p className="font-wordmark-app text-[11px] font-medium tracking-[0.08em] text-brand-cloud/40 mt-0.5">reco-pilot</p>
+          <div className="flex min-w-0 flex-1 items-start gap-2">
+            {mobileNav && (
+              <button
+                type="button"
+                onClick={mobileNav.onOpenClients}
+                className="mt-0.5 shrink-0 rounded-lg p-2 text-brand-cloud/70 hover:bg-white/[0.08] hover:text-brand-cloud transition"
+                aria-label="Open client list"
+                title="Clients"
+              >
+                <IconMenu className="h-5 w-5" />
+              </button>
+            )}
+            <div className="min-w-0">
+              <h2 className="truncate font-semibold text-brand-cloud tracking-tight">{projectName}</h2>
+              <p className="font-wordmark-app text-[11px] font-medium tracking-[0.08em] text-brand-cloud/40 mt-0.5">reco-pilot</p>
+            </div>
           </div>
+          {mobileNav && (
+            <button
+              type="button"
+              onClick={mobileNav.onOpenClientDetails}
+              className="shrink-0 rounded-lg p-2 text-brand-cloud/70 hover:bg-white/[0.08] hover:text-brand-cloud transition"
+              aria-label="Open client workspace"
+              title="Email, documents, settings"
+            >
+              <IconSliders className="h-5 w-5" />
+            </button>
+          )}
         </div>
         {entitlements && !entitlements.can_send_chat && (
           <p className="mt-2 text-[11px] text-amber-200/90 leading-relaxed">
@@ -367,7 +418,7 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
 
       <div
         ref={scrollRef}
-        className="flex-1 overflow-y-auto px-6 py-4"
+        className="flex-1 overflow-y-auto px-3 py-3 sm:px-6 sm:py-4"
         onScroll={syncStickToBottomFromScroll}
       >
         {messages.length === 0 && !isStreaming && (
@@ -406,7 +457,7 @@ export default function ChatPanel({ project, onProjectUpdated }: Props) {
         <div ref={bottomRef} />
       </div>
 
-      <div className="px-4 pt-3 pb-2 border-t border-white/5 bg-black/20">
+      <div className="px-3 pt-3 pb-[max(0.5rem,env(safe-area-inset-bottom))] sm:px-4 sm:pb-2 border-t border-white/5 bg-black/20">
         <p className="text-[10px] text-brand-cloud/35 mb-1.5 px-0.5">
           Type <span className="text-brand-cloud/50">@</span> to attach a document for this message.
           {llmOpts?.property_data_enabled && (
