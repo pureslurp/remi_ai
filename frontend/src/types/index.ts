@@ -14,6 +14,8 @@ export interface Project {
   notes?: string
   drive_folder_id?: string
   drive_folder_name?: string
+  drive_folder_resource_key?: string
+  drive_granted_files?: { id: string; name?: string; resourceKey?: string }[]
   /** @deprecated Prefer gmail_address_rules; used when no per-address rule exists */
   gmail_keywords?: string[]
   /** Default for addresses with no saved rule: how global keywords apply to subject */

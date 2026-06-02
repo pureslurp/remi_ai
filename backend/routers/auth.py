@@ -34,6 +34,7 @@ from config import (
 )
 from database import get_db
 from deps.auth import require_account
+from deps.google_creds import get_google_credentials
 from deps.session_jwt import create_session_token, decode_session_token
 from models import Account
 from models.google_oauth import GoogleOAuthCredential
@@ -794,6 +795,16 @@ def google_oauth_diagnostics():
     }
     base.update(postgres_connection_diagnostics())
     return base
+
+
+@router.get("/google/picker-token")
+def google_picker_token(_account_id: str = Depends(require_account)):
+    """Short-lived access token for Google Picker (drive.file folder selection)."""
+    try:
+        creds = get_google_credentials()
+    except RuntimeError as exc:
+        raise HTTPException(400, str(exc)) from exc
+    return {"access_token": creds.token}
 
 
 @router.get("/google/status")

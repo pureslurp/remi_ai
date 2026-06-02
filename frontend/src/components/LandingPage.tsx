@@ -321,7 +321,7 @@ const FEATURES = [
   },
   {
     title: 'Documents & folders',
-    body: 'Sync a folder from cloud storage, or drop in a PDF, DOCX, or TXT. Chat reads them alongside everything else for that client.',
+    body: 'Choose a Google Drive folder per client and sync documents, or drop in a PDF, DOCX, or TXT. Chat reads them alongside everything else for that client.',
   },
   {
     title: 'Negotiation & drafting',

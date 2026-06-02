@@ -297,7 +297,8 @@ export default function App() {
       {showGoogleBanner && (
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 border-b border-amber-400/20 bg-amber-500/[0.07] px-4 py-2.5 text-sm text-amber-100/90">
           <p>
-            Connect your Google account to enable email sync and Drive document import.{' '}
+            Connect your Google account to enable email sync and Drive import, then choose a Drive folder in each
+            client&apos;s settings.{' '}
             <button
               type="button"
               onClick={handleConnectGoogle}

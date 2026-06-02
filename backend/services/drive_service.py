@@ -6,31 +6,14 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 from models import Project, Document
-from config import GOOGLE_SCOPES
+from deps.google_creds import get_google_credentials
 from services.document_service import process_bytes
-from services import google_token_store
 
 logger = logging.getLogger("reco.drive")
 
 
-def _get_creds():
-    from google.oauth2.credentials import Credentials
-    from google.auth.transport.requests import Request
-
-    if not google_token_store.credentials_exist():
-        raise RuntimeError("Google not authenticated.")
-
-    info = google_token_store.credentials_to_info()
-    if not info:
-        raise RuntimeError("Google not authenticated.")
-
-    creds = Credentials.from_authorized_user_info(info, GOOGLE_SCOPES)
-    if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        google_token_store.save_credentials_json(creds.to_json())
-    if not creds.valid:
-        raise RuntimeError("Google token expired. Reconnect Google in settings.")
-    return creds
+class DriveFolderAccessError(Exception):
+    """Folder not accessible with drive.file (not granted via Picker or revoked)."""
 
 
 def extract_folder_id(url_or_id: str) -> str:
@@ -40,8 +23,89 @@ def extract_folder_id(url_or_id: str) -> str:
 
 _MAX_FILES = 5000  # hard cap so a misconfigured folder graph can't OOM the worker.
 
+_LIST_FIELDS = (
+    "nextPageToken, files(id, name, mimeType, size, modifiedTime, "
+    "md5Checksum, shortcutDetails)"
+)
 
-def _list_all_files(drive, folder_id: str) -> list[dict]:
+
+def _folder_metadata(drive, folder_id: str, resource_key: str | None = None) -> dict:
+    kwargs: dict = {
+        "fileId": folder_id,
+        "fields": "id,name,mimeType,driveId",
+        "supportsAllDrives": True,
+    }
+    if resource_key:
+        kwargs["resourceKey"] = resource_key
+    return drive.files().get(**kwargs).execute()
+
+
+def _normalize_granted_files(raw) -> list[dict]:
+    if not raw:
+        return []
+    out: list[dict] = []
+    for item in raw:
+        if isinstance(item, str) and item.strip():
+            out.append({"id": item.strip()})
+        elif isinstance(item, dict):
+            fid = (item.get("id") or "").strip()
+            if fid:
+                entry = {"id": fid}
+                rk = (item.get("resourceKey") or "").strip()
+                if rk:
+                    entry["resourceKey"] = rk
+                out.append(entry)
+    return out
+
+
+def _get_file_metadata(drive, file_id: str, resource_key: str | None = None) -> dict | None:
+    kwargs: dict = {
+        "fileId": file_id,
+        "fields": "id, name, mimeType, size, modifiedTime, md5Checksum",
+        "supportsAllDrives": True,
+    }
+    if resource_key:
+        kwargs["resourceKey"] = resource_key
+    try:
+        return drive.files().get(**kwargs).execute()
+    except Exception:
+        logger.exception("Drive: get metadata failed for %s", file_id)
+        return None
+
+
+def _list_kwargs(parent_id: str, shared_drive_id: str | None, page_token: str | None = None) -> dict:
+    """Build files.list kwargs; shared-drive folders need corpora=drive + driveId."""
+    kwargs: dict = {
+        "q": f"'{parent_id}' in parents and trashed=false",
+        "fields": _LIST_FIELDS,
+        "pageSize": 100,
+        "supportsAllDrives": True,
+        "includeItemsFromAllDrives": True,
+    }
+    if shared_drive_id:
+        kwargs["corpora"] = "drive"
+        kwargs["driveId"] = shared_drive_id
+    else:
+        kwargs["corpora"] = "user"
+    if page_token:
+        kwargs["pageToken"] = page_token
+    return kwargs
+
+
+def _count_immediate_children(drive, folder_id: str, shared_drive_id: str | None) -> int:
+    total = 0
+    page_token = None
+    while True:
+        kwargs = _list_kwargs(folder_id, shared_drive_id, page_token)
+        resp = drive.files().list(**kwargs).execute()
+        total += len(resp.get("files", []))
+        page_token = resp.get("nextPageToken")
+        if not page_token:
+            break
+    return total
+
+
+def _list_all_files(drive, folder_id: str, shared_drive_id: str | None = None) -> list[dict]:
     """Iteratively list all non-trashed files under a Drive folder (incl. shared drives + shortcuts).
 
     Uses a visited-set so folder shortcuts that loop back (e.g. a shortcut inside a folder
@@ -64,22 +128,19 @@ def _list_all_files(drive, folder_id: str) -> list[dict]:
 
         page_token = None
         while True:
-            kwargs = dict(
-                q=f"'{current}' in parents and trashed=false",
-                fields=(
-                    "nextPageToken, files(id, name, mimeType, size, modifiedTime, "
-                    "md5Checksum, shortcutDetails)"
-                ),
-                pageSize=100,
-                supportsAllDrives=True,
-                includeItemsFromAllDrives=True,
-            )
-            if page_token:
-                kwargs["pageToken"] = page_token
+            kwargs = _list_kwargs(current, shared_drive_id, page_token)
 
             try:
                 resp = drive.files().list(**kwargs).execute()
-            except Exception:
+            except Exception as exc:
+                from googleapiclient.errors import HttpError
+
+                if current == folder_id and isinstance(exc, HttpError):
+                    status = getattr(exc.resp, "status", None)
+                    if status in (403, 404):
+                        raise DriveFolderAccessError(
+                            f"Drive folder not accessible (HTTP {status})"
+                        ) from exc
                 logger.exception("Drive: list failed for folder %s", current)
                 break
 
@@ -204,19 +265,76 @@ def _download_file(drive, file: dict) -> tuple[bytes, str]:
 def sync_drive(project: Project, db: Session) -> dict:
     from googleapiclient.discovery import build as google_build
 
-    if not project.drive_folder_id:
+    creds = get_google_credentials()
+    drive = google_build("drive", "v3", credentials=creds)
+
+    folder_id = extract_folder_id(project.drive_folder_id) if project.drive_folder_id else None
+    folder_resource_key = getattr(project, "drive_folder_resource_key", None) or None
+    granted = _normalize_granted_files(getattr(project, "drive_granted_files", None))
+    shared_drive_id: str | None = None
+    folder_name = project.drive_folder_name or folder_id or "Drive"
+
+    if not folder_id and not granted:
         return {
             "synced": 0,
             "skipped": 0,
             "skip_reasons": {},
-            "message": "No Drive folder configured. Paste a folder URL in settings.",
+            "message": (
+                "Choose a Drive folder, then use Select files to sync (required for Google drive.file access)."
+            ),
         }
 
-    creds = _get_creds()
-    drive = google_build("drive", "v3", credentials=creds)
+    if folder_id:
+        try:
+            folder_meta = _folder_metadata(drive, folder_id, folder_resource_key)
+            folder_name = folder_meta.get("name") or folder_name
+            shared_drive_id = folder_meta.get("driveId")
+            logger.info(
+                "Drive sync start project=%s folder=%s (%s) shared_drive_id=%s granted=%d",
+                project.id,
+                folder_id,
+                folder_name,
+                shared_drive_id or "my-drive",
+                len(granted),
+            )
+        except Exception as exc:
+            from googleapiclient.errors import HttpError
 
-    folder_id = extract_folder_id(project.drive_folder_id)
-    all_files = _list_all_files(drive, folder_id)
+            if isinstance(exc, HttpError) and getattr(exc.resp, "status", None) in (403, 404):
+                return {
+                    "synced": 0,
+                    "skipped": 0,
+                    "skip_reasons": {},
+                    "message": (
+                        "Could not access this Drive folder. Choose the folder again in settings. "
+                        "If you recently changed Google permissions, reconnect Google and re-select the folder."
+                    ),
+                }
+            logger.exception("Drive: could not read folder metadata %s", folder_id)
+            raise
+
+    all_files: list[dict] = []
+    seen_ids: set[str] = set()
+
+    for entry in granted:
+        fid = entry["id"]
+        if fid in seen_ids:
+            continue
+        seen_ids.add(fid)
+        meta = _get_file_metadata(drive, fid, entry.get("resourceKey"))
+        if meta and meta.get("mimeType") != "application/vnd.google-apps.folder":
+            all_files.append(meta)
+
+    if folder_id:
+        try:
+            tree_files = _list_all_files(drive, folder_id, shared_drive_id)
+        except DriveFolderAccessError:
+            tree_files = []
+        for f in tree_files:
+            fid = f.get("id")
+            if fid and fid not in seen_ids:
+                seen_ids.add(fid)
+                all_files.append(f)
 
     synced_count = 0
     skip_reasons: Counter[str] = Counter()
@@ -288,13 +406,51 @@ def sync_drive(project: Project, db: Session) -> dict:
         parts.append(f"{skip_reasons[REASON_DOWNLOAD_FAILED]} download/processing failed (see server log)")
 
     detail = "; ".join(parts)
+    files_in_tree = len(all_files)
     msg = f"Synced {synced_count} new file(s), skipped {skipped_total}."
     if detail:
         msg = f"{msg} ({detail})"
+
+    if synced_count == 0 and skipped_total == 0:
+        child_count = -1
+        if folder_id:
+            try:
+                child_count = _count_immediate_children(drive, folder_id, shared_drive_id)
+            except Exception:
+                child_count = -1
+        logger.info(
+            "Drive sync empty project=%s folder=%s children=%s files_in_tree=%s",
+            project.id,
+            folder_id,
+            child_count,
+            files_in_tree,
+        )
+        if files_in_tree == 0:
+            if not granted:
+                msg = (
+                    f'Google drive.file access does not list folder contents for "{folder_name}". '
+                    "Click Select files to sync, choose the PDFs in that folder (you can multi-select), then Sync Now."
+                )
+            elif child_count == 0:
+                msg = (
+                    f'Folder "{folder_name}" looks empty to the API, and no granted files were readable. '
+                    "Use Select files to sync and pick the documents in Google Drive."
+                )
+            elif child_count > 0:
+                msg = (
+                    f'Found {child_count} item(s) in "{folder_name}" but no supported files in tree. '
+                    "Use Select files to sync to grant access to specific PDFs/DOCX files."
+                )
+            else:
+                msg = (
+                    f'No supported files synced. Use Select files to sync for "{folder_name}", '
+                    "then run Sync Now again."
+                )
 
     return {
         "synced": synced_count,
         "skipped": skipped_total,
         "skip_reasons": dict(skip_reasons),
+        "files_in_tree": files_in_tree,
         "message": msg,
     }

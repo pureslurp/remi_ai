@@ -6,6 +6,7 @@ import { getClientPanelCopy } from '../lib/clientPanelCopy'
 import TransactionPanel from './TransactionPanel'
 import DocumentList from './DocumentList'
 import SyncStatus from './SyncStatus'
+import { openDriveFilesPicker, openDriveFolderPicker } from '../lib/googlePicker'
 
 type KeywordMode = 'include' | 'exclude'
 
@@ -115,7 +116,7 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
   const [globalKeywordMode, setGlobalKeywordMode] = useState<KeywordMode>('include')
   const [gmailDefaultsOpen, setGmailDefaultsOpen] = useState(false)
   const [expandedClientEmail, setExpandedClientEmail] = useState<string | null>(null)
-  const [driveUrl, setDriveUrl] = useState(project.drive_folder_id || '')
+  const [drivePickerBusy, setDrivePickerBusy] = useState(false)
   const [gmailSyncing, setGmailSyncing] = useState(false)
   const [driveSyncing, setDriveSyncing] = useState(false)
   const [gmailMsg, setGmailMsg] = useState('')
@@ -128,7 +129,6 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
     setName(project.name)
     setPhone(project.phone || '')
     setNotes(project.notes || '')
-    setDriveUrl(project.drive_folder_id || '')
     setGlobalKwInput((project.gmail_keywords || []).join(', '))
     setGlobalKeywordMode(project.gmail_keyword_mode === 'exclude' ? 'exclude' : 'include')
     setExpandedClientEmail(null)
@@ -200,9 +200,96 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
     onProjectUpdated(updated)
   }
 
-  const saveDriveUrl = async () => {
-    const updated = await api.updateProject(project.id, { drive_folder_id: driveUrl.trim() || null as unknown as string })
+  const grantedFileCount = (project.drive_granted_files || []).length
+
+  const clearDriveFolder = async () => {
+    const updated = await api.updateProject(project.id, {
+      drive_folder_id: null as unknown as string,
+      drive_folder_name: null as unknown as string,
+      drive_folder_resource_key: null as unknown as string,
+      drive_granted_files: [],
+    })
     onProjectUpdated(updated)
+    setDriveMsg('')
+  }
+
+  const chooseDriveFolder = async () => {
+    const apiKey = import.meta.env.VITE_GOOGLE_API_KEY?.trim()
+    const appId = import.meta.env.VITE_GOOGLE_APP_ID?.trim()
+    if (!apiKey || !appId) {
+      setDriveMsg('Google Picker is not configured on this deployment.')
+      return
+    }
+    setDrivePickerBusy(true)
+    setDriveMsg('')
+    try {
+      const { access_token } = await api.getGooglePickerToken()
+      await openDriveFolderPicker({
+        accessToken: access_token,
+        developerKey: apiKey,
+        appId,
+        onPicked: async folder => {
+          const updated = await api.updateProject(project.id, {
+            drive_folder_id: folder.id,
+            drive_folder_name: folder.name,
+            drive_folder_resource_key: folder.resourceKey || (null as unknown as string),
+          })
+          onProjectUpdated(updated)
+          setDriveMsg(
+            `Folder "${folder.name}" selected. Click Select files to sync and choose the PDFs in that folder.`,
+          )
+        },
+        onCancel: () => {},
+        onError: msg => setDriveMsg(msg),
+      })
+    } catch (err: unknown) {
+      setDriveMsg(err instanceof Error ? err.message : 'Could not open folder picker')
+    } finally {
+      setDrivePickerBusy(false)
+    }
+  }
+
+  const selectDriveFiles = async () => {
+    const apiKey = import.meta.env.VITE_GOOGLE_API_KEY?.trim()
+    const appId = import.meta.env.VITE_GOOGLE_APP_ID?.trim()
+    if (!apiKey || !appId) {
+      setDriveMsg('Google Picker is not configured on this deployment.')
+      return
+    }
+    setDrivePickerBusy(true)
+    setDriveMsg('')
+    try {
+      const { access_token } = await api.getGooglePickerToken()
+      await openDriveFilesPicker({
+        accessToken: access_token,
+        developerKey: apiKey,
+        appId,
+        parentFolderId: project.drive_folder_id,
+        onPicked: async files => {
+          const existing = project.drive_granted_files || []
+          const byId = new Map(existing.map(f => [f.id, f]))
+          for (const f of files) {
+            byId.set(f.id, {
+              id: f.id,
+              name: f.name,
+              ...(f.resourceKey ? { resourceKey: f.resourceKey } : {}),
+            })
+          }
+          const merged = Array.from(byId.values())
+          const updated = await api.updateProject(project.id, {
+            drive_granted_files: merged,
+          })
+          onProjectUpdated(updated)
+          setDriveMsg(`Access granted for ${files.length} file(s). Click Sync Now.`)
+        },
+        onCancel: () => {},
+        onError: msg => setDriveMsg(msg),
+      })
+    } catch (err: unknown) {
+      setDriveMsg(err instanceof Error ? err.message : 'Could not open file picker')
+    } finally {
+      setDrivePickerBusy(false)
+    }
   }
 
   const syncGmail = async () => {
@@ -608,15 +695,55 @@ export default function ClientSettings({ project, onProjectUpdated }: Props) {
               <span className="text-brand-cloud/70">Documents</span> above instead.
             </p>
           )}
-          <div className="flex gap-2 mb-3">
-            <input
-              className="flex-1 bg-white/[0.04] border border-white/10 rounded-lg px-3 py-2 text-xs text-brand-cloud placeholder-brand-cloud/35 outline-none focus:ring-1 focus:ring-brand-mint/50 focus:border-brand-mint/50"
-              value={driveUrl}
-              onChange={e => setDriveUrl(e.target.value)}
-              onBlur={saveDriveUrl}
-              placeholder="Paste Drive folder URL or ID"
-            />
+          <p className="text-[11px] text-brand-cloud/55 mb-2 leading-relaxed">
+            With Google&apos;s drive.file scope, pick a folder, then select which files to sync (multi-select in
+            Drive). Run Sync Now after selecting files; add more files anytime with Select files to sync.
+          </p>
+          <p className="text-xs text-brand-cloud/80 mb-1 truncate" title={project.drive_folder_name || project.drive_folder_id || undefined}>
+            {project.drive_folder_name || project.drive_folder_id
+              ? `Folder: ${project.drive_folder_name || project.drive_folder_id}`
+              : 'No folder selected'}
+          </p>
+          <p className="text-xs text-brand-cloud/60 mb-2">
+            {grantedFileCount > 0
+              ? `${grantedFileCount} file(s) granted for sync`
+              : 'No files granted yet — use Select files to sync'}
+          </p>
+          <div className="flex flex-wrap gap-2 mb-3">
+            <button
+              type="button"
+              disabled={!googleConnected || drivePickerBusy || authProvider === 'email'}
+              onClick={() => void chooseDriveFolder()}
+              className="px-3 py-2 rounded-lg text-xs font-medium bg-white/[0.06] border border-white/10 text-brand-cloud hover:bg-white/[0.1] disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              {drivePickerBusy
+                ? 'Opening…'
+                : project.drive_folder_id
+                  ? 'Change folder'
+                  : 'Choose Drive folder'}
+            </button>
+            <button
+              type="button"
+              disabled={!googleConnected || drivePickerBusy || authProvider === 'email'}
+              onClick={() => void selectDriveFiles()}
+              className="px-3 py-2 rounded-lg text-xs font-medium bg-brand-mint/15 border border-brand-mint/30 text-brand-mint hover:bg-brand-mint/25 disabled:opacity-40 disabled:cursor-not-allowed transition"
+            >
+              Select files to sync
+            </button>
+            {(project.drive_folder_id || grantedFileCount > 0) && (
+              <button
+                type="button"
+                disabled={drivePickerBusy}
+                onClick={() => void clearDriveFolder()}
+                className="px-3 py-2 rounded-lg text-xs text-brand-cloud/60 hover:text-brand-cloud border border-white/10 hover:bg-white/[0.05] transition"
+              >
+                Clear
+              </button>
+            )}
           </div>
+          {authProvider === 'google' && !googleConnected && (
+            <p className="text-xs text-amber-300 mb-2">Connect Google in settings to choose a folder.</p>
+          )}
           <SyncStatus
             label="Drive"
             lastSync={project.last_drive_sync}

@@ -29,6 +29,8 @@ class ProjectUpdate(BaseModel):
     notes: Optional[str] = None
     drive_folder_id: Optional[str] = None
     drive_folder_name: Optional[str] = None
+    drive_folder_resource_key: Optional[str] = None
+    drive_granted_files: Optional[List[dict]] = None
     gmail_keywords: Optional[List[str]] = None
     gmail_keyword_mode: Optional[str] = None
     gmail_address_rules: Optional[Dict[str, GmailAddressRule]] = None
@@ -46,6 +48,8 @@ class ProjectOut(BaseModel):
     notes: Optional[str]
     drive_folder_id: Optional[str]
     drive_folder_name: Optional[str]
+    drive_folder_resource_key: Optional[str] = None
+    drive_granted_files: List[dict] = Field(default_factory=list)
     gmail_keywords: Optional[List[str]] = Field(default_factory=list)
     gmail_keyword_mode: Optional[str] = "include"
     gmail_address_rules: Optional[Dict[str, GmailAddressRule]] = Field(default_factory=dict)

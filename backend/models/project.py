@@ -17,6 +17,9 @@ class Project(Base):
     notes = Column(Text)
     drive_folder_id = Column(String)
     drive_folder_name = Column(String)
+    drive_folder_resource_key = Column(String)
+    # Files explicitly shared via Google Picker (required for drive.file scope).
+    drive_granted_files = Column(JSON, default=list)
     gmail_history_id = Column(String)
     gmail_keywords = Column(JSON, default=list)
     # "include" = subject must contain a keyword (when keywords non-empty); "exclude" = skip if subject matches any

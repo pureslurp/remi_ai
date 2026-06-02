@@ -7,9 +7,8 @@ from email.utils import parsedate_to_datetime
 from sqlalchemy.orm import Session
 
 from models import Project, EmailThread, EmailMessage, Document
-from config import GOOGLE_SCOPES
+from deps.google_creds import get_google_credentials
 from services.document_service import process_bytes
-from services import google_token_store
 
 logger = logging.getLogger("reco.gmail")
 
@@ -22,23 +21,7 @@ def _pg_safe_str(s: str | None) -> str:
 
 
 def _get_creds():
-    from google.oauth2.credentials import Credentials
-    from google.auth.transport.requests import Request
-
-    if not google_token_store.credentials_exist():
-        raise RuntimeError("Google not authenticated. Connect Google in settings.")
-
-    info = google_token_store.credentials_to_info()
-    if not info:
-        raise RuntimeError("Google not authenticated. Connect Google in settings.")
-
-    creds = Credentials.from_authorized_user_info(info, GOOGLE_SCOPES)
-    if creds.expired and creds.refresh_token:
-        creds.refresh(Request())
-        google_token_store.save_credentials_json(creds.to_json())
-    if not creds.valid:
-        raise RuntimeError("Google token expired. Reconnect Google in settings.")
-    return creds
+    return get_google_credentials()
 
 
 def _strip_html_to_text(raw: str) -> str:

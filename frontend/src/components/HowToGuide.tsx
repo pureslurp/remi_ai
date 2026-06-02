@@ -160,8 +160,9 @@ export default function HowToGuide() {
                 list is mostly Drive plus attachments the app turned into files.
               </li>
               <li>
-                Google Drive sync (same Google-only note): paste a folder link or id, click away so it saves, then run sync.
-                If you log in with email and password instead, skip this and just drop files under Documents.
+                Google Drive sync (same Google-only note): choose a client folder with Choose Drive folder (Google&apos;s
+                picker), then run sync. New files added in that folder later are picked up on the next sync. If you log in
+                with email and password instead, skip this and just drop files under Documents.
               </li>
               <li>
                 Clear chat history at the very bottom wipes the conversation for this client after you confirm. It leaves

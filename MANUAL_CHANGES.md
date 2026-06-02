@@ -4,6 +4,16 @@ These steps require action in external platforms and cannot be automated by code
 
 ---
 
+## Google Cloud (Drive `drive.file` + Picker)
+
+- [ ] OAuth consent screen: remove `drive.readonly`; add `https://www.googleapis.com/auth/drive.file`
+- [ ] Create **API key** with HTTP referrer restrictions for production + `http://localhost:5173/*`
+- [ ] Set on **Vercel**: `VITE_GOOGLE_API_KEY`, `VITE_GOOGLE_APP_ID` (GCP project number)
+- [ ] Reply to Google verification email: **Confirming narrower scopes** (after deploy)
+- [ ] Existing users: reconnect Google and re-pick Drive folder per client
+
+---
+
 ## Railway
 
 - [ ] Rename service from `remiai-production` → `reco-production`  

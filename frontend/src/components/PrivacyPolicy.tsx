@@ -55,9 +55,9 @@ export default function PrivacyPolicy() {
                 We do not send emails on your behalf.
               </li>
               <li>
-                <span className="text-brand-cloud/90 font-medium">Google Drive data</span> — If you connect a Drive
-                folder, reco-pilot reads the files in that folder (PDFs, DOCX, TXT) to answer questions about your clients.
-                We request read-only access. We do not modify or delete your Drive files.
+                <span className="text-brand-cloud/90 font-medium">Google Drive data</span> — If you choose a Drive
+                folder in Google&apos;s picker, reco-pilot reads supported files in that folder (PDFs, DOCX, TXT) to answer
+                questions about your clients. We only access folders you select. We do not modify or delete your Drive files.
               </li>
               <li>
                 <span className="text-brand-cloud/90 font-medium">Client workspace data</span> — Notes, transaction
@@ -120,7 +120,7 @@ export default function PrivacyPolicy() {
             <p>reco-pilot requests the following Google OAuth scopes:</p>
             <ul className="mt-3 space-y-2 font-mono text-xs text-brand-cloud/60">
               <li className="rounded-lg bg-white/[0.04] px-3 py-2">gmail.readonly — read email threads associated with your clients</li>
-              <li className="rounded-lg bg-white/[0.04] px-3 py-2">drive.readonly — read files in a folder you designate for a client</li>
+              <li className="rounded-lg bg-white/[0.04] px-3 py-2">drive.file — read files in a folder you select for a client in Google Drive</li>
               <li className="rounded-lg bg-white/[0.04] px-3 py-2">userinfo.email — identify your account</li>
               <li className="rounded-lg bg-white/[0.04] px-3 py-2">openid — authenticate your session</li>
             </ul>

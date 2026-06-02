@@ -177,6 +177,8 @@ Use that same HTTPS origin (the hostname from step **D.3**) as **`VITE_API_BASE`
 3. **Authorized redirect URIs**: exactly `https://<YOUR_API_HOST>/api/auth/google/callback` (same value as `GOOGLE_REDIRECT_URI`).
 4. Put **Client ID** and **Client secret** in the API environment as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET`.
 5. **`FRONTEND_ORIGIN` on Railway** (required for a good UX): after Google approves the user, the API sends the browser to `{FRONTEND_ORIGIN}/?google_connected=1`. If `FRONTEND_ORIGIN` is missing, the app uses the dev default **`http://localhost:5173`**, so production users look like “OAuth broke” when they actually land on localhost. Set it to your **Vercel** site origin (no path, no trailing slash), same host you put in `CORS_ORIGINS`.
+6. **Drive scope**: use **`https://www.googleapis.com/auth/drive.file`** (not `drive.readonly`) on the OAuth consent screen. Users pick folders via Google Picker in the app.
+7. **Picker API key**: APIs & Services → Credentials → **Create credentials** → **API key** → restrict by **HTTP referrers**: `https://reco-pilot.com/*`, `https://www.reco-pilot.com/*`, `http://localhost:5173/*` (and preview URLs if needed). Enable **Google Picker API** in the API Library if prompted.
 
 ---
 
@@ -185,7 +187,11 @@ Use that same HTTPS origin (the hostname from step **D.3**) as **`VITE_API_BASE`
 1. New Project → import this repo.
 2. **Root Directory**: `frontend`.
 3. Build: `npm run build`, Output: `dist`.
-4. **Environment variable**: `VITE_API_BASE` = `https://your-api.example.com` (no trailing slash; do **not** include `/api` — the app appends `/api` itself).
+4. **Environment variables**:
+   - `VITE_API_BASE` = `https://your-api.example.com` (no trailing slash; do **not** include `/api` — the app appends `/api` itself).
+   - `VITE_GOOGLE_API_KEY` = Picker developer key (§3 step 7).
+   - `VITE_GOOGLE_APP_ID` = GCP **project number** (Project settings → Project number; used as Picker `setAppId`).
+   - Optional: `VITE_GOOGLE_CLIENT_ID` if you need it client-side later (Picker uses the OAuth token from the API).
 
 If you use **rewrites** instead, add to `frontend/vercel.json` something like:
 
@@ -209,7 +215,8 @@ Then leave `VITE_API_BASE` unset so requests stay same-origin.
 - [ ] Supabase: database reachable from API; optional Storage bucket created  
 - [ ] API: `alembic upgrade head` succeeds (or rely on app startup); secrets only in platform env  
 - [ ] Vercel: `VITE_API_BASE` or rewrites correct; production build opens the app  
-- [ ] Google: Web client redirect URI matches `GOOGLE_REDIRECT_URI`  
+- [ ] Google: Web client redirect URI matches `GOOGLE_REDIRECT_URI`; consent screen uses `drive.file` (not `drive.readonly`)
+- [ ] Vercel: `VITE_GOOGLE_API_KEY` and `VITE_GOOGLE_APP_ID` set for Drive folder Picker  
 - [ ] CORS: `CORS_ORIGINS` includes your Vercel origin  
 - [ ] `SESSION_SECRET` set (Postgres + Google); redeploy API after adding  
 - [ ] Smoke test from a second device: open app, Google connect, one chat, one upload  

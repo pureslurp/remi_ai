@@ -101,10 +101,10 @@ In the right panel under **Active Transaction**:
 3. Email threads (including PDF/DOCX attachments) become part of the AI context
 
 ### Syncing Google Drive
-1. Open the client's Google Drive folder in your browser
-2. Copy the URL (e.g. `https://drive.google.com/drive/folders/1AbCdEfG...`)
-3. Paste it in the **Drive Sync** section and press Tab to save
-4. Click **Sync Now** — all files (including subfolders) are indexed
+1. In the client's **Drive Sync** section, click **Choose Drive folder**
+2. Select the client's folder in Google's picker and confirm
+3. Click **Sync Now** — supported files (including subfolders) are imported
+4. Run **Sync Now** again anytime new files are added to that folder
 
 ### Uploading Documents
 - Drag & drop files onto the Documents drop zone, or click to browse

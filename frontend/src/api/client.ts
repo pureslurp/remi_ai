@@ -176,6 +176,7 @@ export type GoogleStatus = {
 }
 
 export const getGoogleStatus = () => req<GoogleStatus>('/auth/google/status')
+export const getGooglePickerToken = () => req<{ access_token: string }>('/auth/google/picker-token')
 export const disconnectGoogle = () => req<void>('/auth/google/disconnect', { method: 'POST' })
 
 // Account — AI system prompts (per transaction type)

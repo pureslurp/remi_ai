@@ -237,7 +237,7 @@ GOOGLE_SCOPES = [
     "https://www.googleapis.com/auth/gmail.readonly",
     # gmail.compose — not requested in GCP for now; see gmail_service.create_gmail_draft
     # "https://www.googleapis.com/auth/gmail.compose",
-    "https://www.googleapis.com/auth/drive.readonly",
+    "https://www.googleapis.com/auth/drive.file",
     "openid",
     "https://www.googleapis.com/auth/userinfo.email",
 ]
